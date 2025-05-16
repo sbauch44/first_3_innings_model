@@ -1,0 +1,11 @@
+# Ignore these directories
+.venv/
+raw_data/
+testing/
+
+# Common Python ignores
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python

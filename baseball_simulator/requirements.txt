@@ -1,0 +1,13 @@
+arviz
+joblib
+json
+numpy
+pandas
+pathlib
+polars
+pybaseball
+pymc
+pytz
+re
+requests
+statsapi
