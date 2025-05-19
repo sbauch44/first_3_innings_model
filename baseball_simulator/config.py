@@ -6,6 +6,7 @@ NUM_SIMULATIONS = 10_000
  
 # --- File Paths & Names ---
 BASE_FILE_PATH = '/content/drive/My Drive/Betting Models/mlb/hits_model/' # Or use environment variables
+
 RAW_STATCAST_FILES = [
     '2021_statcast_data.parquet',
     '2022_statcast_data.parquet',
@@ -160,6 +161,38 @@ OUTCOME_LABELS = { # Added example
     5: "Strikeout", 6: "Walk", 7: "HBP"
 }
 N_CATEGORIES = len(OUTCOME_LABELS)
+
+# In config.py or passed to prepare_simulation_inputs
+PITCHER_PREDICTOR_SUBSET = [
+    'pitcher_k_pct_a_daily_input',
+    'pitcher_bb_pct_a_daily_input',
+    'pitcher_hbp_pct_a_daily_input', # If you calculated and used this
+    'pitcher_1b_pct_a_daily_input', # If you calculated and used this
+    'pitcher_2b_pct_a_daily_input', # If you calculated and used this
+    'pitcher_3b_pct_a_daily_input', # If you calculated and used this
+    'pitcher_hr_pct_a_daily_input', # If you calculated and used this
+    'pitcher_non_k_out_pct_a_daily_input' # If you calculated and used this
+    # Note: 'pitcher_avg_a_daily_input' was commented out in your notebook.
+    # If you ended up including it in your final model training, add it here.
+    # Add any other pitcher-specific rolling/ballasted rates that were part of your final X_np matrix.
+]
+
+
+# In config.py or passed to prepare_simulation_inputs
+BATTER_PREDICTOR_SUBSET = [
+    'batter_k_pct_daily_input',
+    'batter_bb_pct_daily_input',
+    'batter_hbp_pct_daily_input',      # If you calculated and used this
+    'batter_1b_pct_daily_input',      # If you calculated and used this
+    'batter_2b_pct_daily_input',      # If you calculated and used this
+    'batter_3b_pct_daily_input',      # If you calculated and used this
+    'batter_hr_pct_daily_input',      # If you calculated and used this
+    'batter_non_k_out_pct_daily_input' # If you calculated and used this
+    # Note: 'batter_avg_daily_input' was commented out in your notebook.
+    # If you ended up including it in your final model training, add it here.
+    # Add any other batter-specific rolling/ballasted rates that were part of your final X_np matrix.
+]
+
 
 team_mapping = {
     'BOS': 'Red Sox',

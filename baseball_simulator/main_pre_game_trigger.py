@@ -23,7 +23,7 @@ def run_pre_game_simulation(game_pk):
     # 2. Get Lineups/Pitchers
     # Need game_info containing home/away team IDs, venue etc. from schedule first
     # This might need to be passed in or fetched again based on game_pk
-    game_info = data_fetcher.get_game_info(game_pk) # Assumes function exists
+    game_info = data_fetcher.get_game_info(game_pk) 
     lineup_data = data_fetcher.get_batting_orders(game_pk)
     if not lineup_data or not lineup_data.get('home') or not lineup_data.get('away'):
         print(f"Could not get lineups for {game_pk}. Aborting.")

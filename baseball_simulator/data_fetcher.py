@@ -58,14 +58,14 @@ def fetch_fangraphs_projections(position=None):
     return df
 
 
-def get_batting_orders(game_json):
+def get_batting_orders(game_pk):
+    game_json = statsapi.get('game',{'gamePk': game_pk})
     batting_orders = {}
     boxscores = game_json["liveData"]["boxscore"]["teams"]
     home = boxscores["home"]["battingOrder"]
     away = boxscores["away"]["battingOrder"]
     batting_orders["home"] = home
     batting_orders["away"] = away
-
     return batting_orders
 
 
