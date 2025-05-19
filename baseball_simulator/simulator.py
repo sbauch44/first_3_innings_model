@@ -82,6 +82,12 @@ class BaseballSimulator:
         
         # 3. Combine Features
         categorical_data = input_df[self.categorical_cols].values
+        categorical_data = np.asarray(categorical_data)
+        # Ensure both arrays are 2D and have compatible dtypes
+        if categorical_data.ndim == 1:
+            categorical_data = categorical_data.reshape(-1, 1)
+        # Convert categorical_data to float if needed for compatibility
+        categorical_data = categorical_data.astype(float)
         X_new = np.concatenate([scaled_continuous_data, categorical_data], axis=1)
         n_predictors = X_new.shape[1]
         
