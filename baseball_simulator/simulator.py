@@ -14,9 +14,10 @@ class BaseballSimulator:
     plate appearances, innings, and partial games.
     """
     
-    def __init__(self, idata, scaler):
+    def __init__(self, idata, scaler, outcome_labels, predictor_cols, continuous_cols,
+                 categorical_cols, league_avg_rates,):
         """
-        Initialize the baseball simulator with model and scaler.
+        Initialize the baseball simulator with model, scaler and model settings from the config file.
         Args:
             idata file
             scaler file
@@ -25,68 +26,18 @@ class BaseballSimulator:
         self.scaler = scaler
 
         # Define outcome category mapping (same as used in training)
-        self.outcome_labels = {
-            0: "Out_In_Play", 1: "Single", 2: "Double", 3: "Triple", 4: "HomeRun",
-            5: "Strikeout", 6: "Walk", 7: "HBP"
-        }
+        self.outcome_labels = outcome_labels
         self.n_categories = len(self.outcome_labels)
         
         # Define predictor columns
-        self.predictor_cols = [
-            'is_platoon_adv',
-            'is_batter_home',
-            # Pitcher Stats
-            'pitcher_k_pct_a_daily_input',
-            'pitcher_bb_pct_a_daily_input',
-            'pitcher_hbp_pct_a_daily_input',
-            'pitcher_1b_pct_a_daily_input',
-            'pitcher_2b_pct_a_daily_input',
-            'pitcher_3b_pct_a_daily_input',
-            'pitcher_hr_pct_a_daily_input',
-            'pitcher_non_k_out_pct_a_daily_input',
-            # Batter Stats
-            'batter_k_pct_daily_input',
-            'batter_bb_pct_daily_input',
-            'batter_hbp_pct_daily_input',
-            'batter_1b_pct_daily_input',
-            'batter_2b_pct_daily_input',
-            'batter_3b_pct_daily_input',
-            'batter_hr_pct_daily_input',
-            'batter_non_k_out_pct_daily_input',
-            # Context Stats
-            'team_defense_oaa_input',
-            'park_factor_input',
-        ]
+        self.predictor_cols = predictor_cols
         
         # Identify continuous columns needing scaling vs categorical
-        self.continuous_cols = [
-            'pitcher_k_pct_a_daily_input',
-            'pitcher_bb_pct_a_daily_input',
-            'pitcher_hbp_pct_a_daily_input',
-            'pitcher_1b_pct_a_daily_input',
-            'pitcher_2b_pct_a_daily_input',
-            'pitcher_3b_pct_a_daily_input',
-            'pitcher_hr_pct_a_daily_input',
-            'pitcher_non_k_out_pct_a_daily_input',
-            'batter_k_pct_daily_input',
-            'batter_bb_pct_daily_input',
-            'batter_hbp_pct_daily_input',
-            'batter_1b_pct_daily_input',
-            'batter_2b_pct_daily_input',
-            'batter_3b_pct_daily_input',
-            'batter_hr_pct_daily_input',
-            'batter_non_k_out_pct_daily_input',
-            'team_defense_oaa_input',
-            'park_factor_input',
-        ]
-        self.categorical_cols = ['is_platoon_adv', 'is_batter_home']
+        self.continuous_cols = continuous_cols
+        self.categorical_cols = categorical_cols
         
         # Default league average rates - can be overridden
-        self.league_avg_rates = {
-            "rate_1st_to_3rd_on_single": 0.27,  # ~27% of runners advance from 1st to 3rd on singles
-            "rate_score_from_1st_on_double": 0.43,  # ~43% of runners score from 1st on doubles
-            "gidp_effective_rate": 0.065  # ~6.5% of plate appearances with runner on 1st result in GIDP
-        }
+        self.league_avg_rates = league_avg_rates
     
     def set_league_avg_rates(self, rates_dict: Dict[str, float]) -> None:
         """
@@ -632,109 +583,109 @@ class BaseballSimulator:
             return
 
 
-def example_usage():
-    """Example of how to use the BaseballSimulator class."""
-    # Paths to model and scaler files
-    model_path = "/path/to/multi_outcome_model.nc"
-    scaler_path = "/path/to/pa_outcome_scaler.joblib"
+# def example_usage():
+#     """Example of how to use the BaseballSimulator class."""
+#     # Paths to model and scaler files
+#     model_path = "/path/to/multi_outcome_model.nc"
+#     scaler_path = "/path/to/pa_outcome_scaler.joblib"
     
-    # Initialize simulator
-    simulator = BaseballSimulator(model_path, scaler_path)
+#     # Initialize simulator
+#     simulator = BaseballSimulator(model_path, scaler_path)
     
-    # Define example lineup for home team (9 batters)
-    home_lineup = [
-        {
-            'batter_k_pct_daily_input': 0.22,
-            'batter_bb_pct_daily_input': 0.10,
-            'batter_hbp_pct_daily_input': 0.01,
-            'batter_1b_pct_daily_input': 0.16,
-            'batter_2b_pct_daily_input': 0.05,
-            'batter_3b_pct_daily_input': 0.005,
-            'batter_hr_pct_daily_input': 0.04,
-            'batter_non_k_out_pct_daily_input': 0.42,
-            'stand': 'R'  # R for right, L for left
-        },
-        # Add 8 more batters with similar structure
-    ]
+#     # Define example lineup for home team (9 batters)
+#     home_lineup = [
+#         {
+#             'batter_k_pct_daily_input': 0.22,
+#             'batter_bb_pct_daily_input': 0.10,
+#             'batter_hbp_pct_daily_input': 0.01,
+#             'batter_1b_pct_daily_input': 0.16,
+#             'batter_2b_pct_daily_input': 0.05,
+#             'batter_3b_pct_daily_input': 0.005,
+#             'batter_hr_pct_daily_input': 0.04,
+#             'batter_non_k_out_pct_daily_input': 0.42,
+#             'stand': 'R'  # R for right, L for left
+#         },
+#         # Add 8 more batters with similar structure
+#     ]
     
-    # Define example lineup for away team (9 batters)
-    away_lineup = [
-        {
-            'batter_k_pct_daily_input': 0.25,
-            'batter_bb_pct_daily_input': 0.08,
-            'batter_hbp_pct_daily_input': 0.01,
-            'batter_1b_pct_daily_input': 0.15,
-            'batter_2b_pct_daily_input': 0.04,
-            'batter_3b_pct_daily_input': 0.005,
-            'batter_hr_pct_daily_input': 0.03,
-            'batter_non_k_out_pct_daily_input': 0.44,
-            'stand': 'L'
-        },
-        # Add 8 more batters with similar structure
-    ]
+#     # Define example lineup for away team (9 batters)
+#     away_lineup = [
+#         {
+#             'batter_k_pct_daily_input': 0.25,
+#             'batter_bb_pct_daily_input': 0.08,
+#             'batter_hbp_pct_daily_input': 0.01,
+#             'batter_1b_pct_daily_input': 0.15,
+#             'batter_2b_pct_daily_input': 0.04,
+#             'batter_3b_pct_daily_input': 0.005,
+#             'batter_hr_pct_daily_input': 0.03,
+#             'batter_non_k_out_pct_daily_input': 0.44,
+#             'stand': 'L'
+#         },
+#         # Add 8 more batters with similar structure
+#     ]
     
-    # Define pitcher inputs
-    home_pitcher_inputs = {
-        'pitcher_k_pct_a_daily_input': 0.26,
-        'pitcher_bb_pct_a_daily_input': 0.08,
-        'pitcher_hbp_pct_a_daily_input': 0.01,
-        'pitcher_1b_pct_a_daily_input': 0.15,
-        'pitcher_2b_pct_a_daily_input': 0.05,
-        'pitcher_3b_pct_a_daily_input': 0.005,
-        'pitcher_hr_pct_a_daily_input': 0.03,
-        'pitcher_non_k_out_pct_a_daily_input': 0.42,
-        'p_throws': 'R'  # R for right, L for left
-    }
+#     # Define pitcher inputs
+#     home_pitcher_inputs = {
+#         'pitcher_k_pct_a_daily_input': 0.26,
+#         'pitcher_bb_pct_a_daily_input': 0.08,
+#         'pitcher_hbp_pct_a_daily_input': 0.01,
+#         'pitcher_1b_pct_a_daily_input': 0.15,
+#         'pitcher_2b_pct_a_daily_input': 0.05,
+#         'pitcher_3b_pct_a_daily_input': 0.005,
+#         'pitcher_hr_pct_a_daily_input': 0.03,
+#         'pitcher_non_k_out_pct_a_daily_input': 0.42,
+#         'p_throws': 'R'  # R for right, L for left
+#     }
     
-    away_pitcher_inputs = {
-        'pitcher_k_pct_a_daily_input': 0.24,
-        'pitcher_bb_pct_a_daily_input': 0.07,
-        'pitcher_hbp_pct_a_daily_input': 0.01,
-        'pitcher_1b_pct_a_daily_input': 0.16,
-        'pitcher_2b_pct_a_daily_input': 0.05,
-        'pitcher_3b_pct_a_daily_input': 0.005,
-        'pitcher_hr_pct_a_daily_input': 0.035,
-        'pitcher_non_k_out_pct_a_daily_input': 0.43,
-        'p_throws': 'L'
-    }
+#     away_pitcher_inputs = {
+#         'pitcher_k_pct_a_daily_input': 0.24,
+#         'pitcher_bb_pct_a_daily_input': 0.07,
+#         'pitcher_hbp_pct_a_daily_input': 0.01,
+#         'pitcher_1b_pct_a_daily_input': 0.16,
+#         'pitcher_2b_pct_a_daily_input': 0.05,
+#         'pitcher_3b_pct_a_daily_input': 0.005,
+#         'pitcher_hr_pct_a_daily_input': 0.035,
+#         'pitcher_non_k_out_pct_a_daily_input': 0.43,
+#         'p_throws': 'L'
+#     }
     
-    # Define game context
-    game_context = {
-        'park_factor_input': 1.05,  # >1 is hitter-friendly, <1 is pitcher-friendly
-        'home_team_defense_rating': 1.2,  # Defensive ability (OAA-based)
-        'away_team_defense_rating': -0.5
-    }
+#     # Define game context
+#     game_context = {
+#         'park_factor_input': 1.05,  # >1 is hitter-friendly, <1 is pitcher-friendly
+#         'home_team_defense_rating': 1.2,  # Defensive ability (OAA-based)
+#         'away_team_defense_rating': -0.5
+#     }
     
-    # Run a single simulation
-    result = simulator.simulate_first_three_innings(
-        home_lineup, away_lineup, home_pitcher_inputs, away_pitcher_inputs, game_context
-    )
-    print("Single simulation result:")
-    print(result)
+#     # Run a single simulation
+#     result = simulator.simulate_first_three_innings(
+#         home_lineup, away_lineup, home_pitcher_inputs, away_pitcher_inputs, game_context
+#     )
+#     print("Single simulation result:")
+#     print(result)
     
-    # Run multiple simulations (reduced for example)
-    all_results = simulator.run_multiple_simulations(
-        home_lineup, away_lineup, home_pitcher_inputs, away_pitcher_inputs, game_context, num_sims=100
-    )
+#     # Run multiple simulations (reduced for example)
+#     all_results = simulator.run_multiple_simulations(
+#         home_lineup, away_lineup, home_pitcher_inputs, away_pitcher_inputs, game_context, num_sims=100
+#     )
     
-    # Analyze results
-    prob_dict = simulator.analyze_simulation_results(all_results)
-    print("\nProbability analysis:")
-    for inning, teams in prob_dict.items():
-        print(f"\n{inning}:")
-        for team, stats in teams.items():
-            print(f"  {team.upper()}:")
-            for stat, bins in stats.items():
-                print(f"    {stat}: {bins}")
+#     # Analyze results
+#     prob_dict = simulator.analyze_simulation_results(all_results)
+#     print("\nProbability analysis:")
+#     for inning, teams in prob_dict.items():
+#         print(f"\n{inning}:")
+#         for team, stats in teams.items():
+#             print(f"  {team.upper()}:")
+#             for stat, bins in stats.items():
+#                 print(f"    {stat}: {bins}")
     
-    # Example of converting results to a pandas DataFrame
-    prob_df = simulator.convert_probabilities_to_dataframe(prob_dict)
-    print("\nProbability DataFrame head:")
-    print(prob_df.head(10))
+#     # Example of converting results to a pandas DataFrame
+#     prob_df = simulator.convert_probabilities_to_dataframe(prob_dict)
+#     print("\nProbability DataFrame head:")
+#     print(prob_df.head(10))
 
 
-if __name__ == "__main__":
-    # This code only runs when the module is executed directly
-    print("Baseball Simulator Module - Example usage can be run with example_usage()")
-    # Uncommenting the next line would run the example
-    # example_usage()
+# if __name__ == "__main__":
+#     # This code only runs when the module is executed directly
+#     print("Baseball Simulator Module - Example usage can be run with example_usage()")
+#     # Uncommenting the next line would run the example
+#     # example_usage()

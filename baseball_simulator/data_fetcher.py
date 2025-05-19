@@ -3,6 +3,7 @@ import polars as pl
 import requests
 import re
 import json
+import statsapi
 from pybaseball import (
     statcast,
     statcast_fielding,
@@ -66,3 +67,9 @@ def get_batting_orders(game_json):
     batting_orders["away"] = away
 
     return batting_orders
+
+
+def get_game_info(game_pk):
+    sched = statsapi.schedule()
+    game_dict = next((game for game in sched if game['game_id'] == game_pk), None)
+    return game_dict
