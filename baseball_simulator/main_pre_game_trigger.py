@@ -6,17 +6,34 @@ import storage
 import analysis
 import config # To get column names etc.
 import sys
+import logging
 
 def run_pre_game_simulation(game_pk):
-    print(f"Running pre-game simulation for game_pk: {game_pk}")
-
+    """
+    Runs a pre-game simulation for a given baseball game.
+    This function performs the following steps:
+        1. Loads the predictive model and scaler required for simulation.
+        2. Fetches game information, including lineups and pitchers, for the specified game.
+        3. Loads necessary data files such as park factors and defensive statistics.
+        4. Prepares all simulation inputs using the fetched data.
+        5. Runs the simulation for the first three innings multiple times (as specified in config).
+        6. Analyzes the simulation results to calculate probabilities and odds.
+        7. Stores the simulation results for later use.
+    Args:
+        game_pk (int or str): The unique identifier for the game to simulate.
+    Returns:
+        None. Results are saved via the storage module.
+    Logs:
+        - Information and error messages regarding the simulation process and any issues encountered.
+    """
+    logging.info(f"Running pre-game simulation for game_pk: {game_pk}")
 
     # 1. Load model and scaler (do this once if possible)
     loader = model_loader.ModelLoader()
     loader.set_paths(
-    base_dir=config.MODEL_PATH, 
-    model_filename="updated_model.nc", 
-    scaler_filename="updated_scaler.joblib"
+        base_dir=config.MODEL_PATH, 
+        model_filename="updated_model.nc", 
+        scaler_filename="updated_scaler.joblib"
     )
     idata, scaler = loader.load_all()
 
@@ -26,14 +43,14 @@ def run_pre_game_simulation(game_pk):
     game_info = data_fetcher.get_game_info(game_pk) 
     lineup_data = data_fetcher.get_batting_orders(game_pk)
     if not lineup_data or not lineup_data.get('home') or not lineup_data.get('away'):
-        print(f"Could not get lineups for {game_pk}. Aborting.")
+        logging.error(f"Could not get lineups for {game_pk}. Aborting.")
         return
     
     park_factors_df = storage.load_dataframe('park_factors.parquet')
     player_defense_df = storage.load_dataframe("defensive_stats.parquet")
 
     if park_factors_df is None or player_defense_df is None:
-        print("Required data files are missing. Aborting simulation.")
+        logging.error("Required data files are missing. Aborting simulation.")
         return
 
     # 3. Prepare All Inputs
@@ -50,7 +67,7 @@ def run_pre_game_simulation(game_pk):
     # sim_inputs should contain home_lineup_with_stats, away_lineup_with_stats, etc.
     
     if sim_inputs is None:
-        print("Simulation inputs could not be prepared. Aborting simulation.")
+        logging.error("Simulation inputs could not be prepared. Aborting simulation.")
         return
     # 4. Run Simulation (Many times)
     simulator = BaseballSimulator(
@@ -65,7 +82,7 @@ def run_pre_game_simulation(game_pk):
 
     num_sims = config.NUM_SIMULATIONS
     all_runs_results = []
-    print(f"Starting {num_sims} simulations...")
+    logging.info(f"Starting {num_sims} simulations...")
     for _ in range(num_sims):
         run_result = simulator.simulate_first_three_innings(
             home_lineup=sim_inputs['home_lineup_with_stats'],
@@ -75,7 +92,7 @@ def run_pre_game_simulation(game_pk):
             game_context=sim_inputs['game_context'],
         )
         all_runs_results.append(run_result)
-    print("Simulations complete.")
+    logging.info("Simulations complete.")
 
     # 5. Analyze Results to get Probability DataFrame
     results_df = analysis.calculate_probabilities_and_odds(all_runs_results, num_sims) # Assumes function exists
@@ -83,7 +100,7 @@ def run_pre_game_simulation(game_pk):
     # 6. Store Results
     if results_df is not None:
         storage.save_simulation_results(results_df, today_str, game_pk) # type: ignore
-        print(f"Results saved for game {game_pk}")
+        logging.info(f"Results saved for game {game_pk}")
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:
