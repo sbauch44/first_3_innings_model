@@ -22,8 +22,8 @@ RAW_DEFENSE_FILE = 'statcast_defensive_stats.parquet'
 CLEAN_DEFENSE_FILE = 'clean_defensive_stats.parquet'
 RAW_PARKFACTOR_FILE = 'statcast_park_factors.parquet'
 CLEAN_PARKFACTOR_FILE = 'clean_park_factors.parquet'
-MODEL_PATH = "multi_outcome_model.nc" # Added example
-SCALER_PATH = "pa_outcome_scaler.joblib" # Added example
+MODEL_PATH = "." # Added example
+SCALER_PATH = "." # Added example
 
 # --- Data Selection ---
 RAW_COLS_TO_KEEP = [
