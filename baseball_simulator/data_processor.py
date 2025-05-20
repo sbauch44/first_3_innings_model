@@ -535,8 +535,8 @@ def prepare_simulation_inputs(
         # The column names in the returned DFs should match config.BATTER_PREDICTOR_SUBSET / PITCHER_PREDICTOR_SUBSET
         logging.info(f"Fetching projections for {len(all_player_ids_for_projections)} players...")
         # Assume date_str for projections is derived from game_info['game_date']
-        final_bat_projections_path = f"{config.BASE_FILE_PATH}fangraphs_bat_proj.parquet"
-        final_pit_projections_path = f"{config.BASE_FILE_PATH}fangraphs_pit_proj.parquet"
+        final_bat_projections_path = f"{config.BASE_FILE_PATH}fangraphs_bat_projections.parquet"
+        final_pit_projections_path = f"{config.BASE_FILE_PATH}fangraphs_pit_projections.parquet"
         # Load projections from parquet files saved by main_daily_trigger
         bat_projections_df = pl.read_parquet(final_bat_projections_path).filter(
             pl.col("player_id").is_in(all_batter_ids)
