@@ -5,7 +5,7 @@ from pathlib import Path
 NUM_SIMULATIONS = 10_000
  
 # --- File Paths & Names ---
-BASE_FILE_PATH = '/content/drive/My Drive/Betting Models/mlb/hits_model/' # Or use environment variables
+BASE_FILE_PATH = '../clean_data/' # Or use environment variables
 
 RAW_STATCAST_FILES = [
     '2021_statcast_data.parquet',

@@ -32,8 +32,8 @@ def run_pre_game_simulation(game_pk):
     loader = model_loader.ModelLoader()
     loader.set_paths(
         base_dir=config.MODEL_PATH, 
-        model_filename="updated_model.nc", 
-        scaler_filename="updated_scaler.joblib"
+        model_filename="multi_outcome_model.nc", 
+        scaler_filename="pa_outcome_scaler.joblib"
     )
     idata, scaler = loader.load_all()
 
