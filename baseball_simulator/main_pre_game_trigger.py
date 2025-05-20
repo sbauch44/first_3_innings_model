@@ -28,12 +28,22 @@ def run_pre_game_simulation(game_pk):
     if not lineup_data or not lineup_data.get('home') or not lineup_data.get('away'):
         print(f"Could not get lineups for {game_pk}. Aborting.")
         return
+    
+    park_factors_df = storage.load_dataframe('park_factors.parquet')
+    player_defense_df = storage.load_dataframe("defensive_stats.parquet")
+
+    if park_factors_df is None or player_defense_df is None:
+        print("Required data files are missing. Aborting simulation.")
+        return
 
     # 3. Prepare All Inputs
     if game_info is not None:
         sim_inputs = data_processor.prepare_simulation_inputs(
-            game_info, lineup_data['home'], lineup_data['away'],
-            lineup_data['home_pitcher_id'], lineup_data['away_pitcher_id']
+            game_info=game_info, 
+            home_lineup_data=lineup_data['home'], 
+            away_lineup_data=lineup_data['away'],
+            park_factors_df=park_factors_df, 
+            player_defense_df=player_defense_df,
         )
     # sim_inputs should contain home_lineup_with_stats, away_lineup_with_stats, etc.
 

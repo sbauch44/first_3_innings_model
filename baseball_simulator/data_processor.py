@@ -4,21 +4,11 @@ import numpy as np
 import time
 import datetime
 import logging
-from config import (
-    RAW_COLS_TO_KEEP,
-    OUTCOME_COL_NAME,
-    K_EVENTS,
-    BB_EVENTS,
-    HBP_EVENTS,
-    OUT_IN_PLAY_EVENTS,
-    LEAGUE_AVG_RATES,
-    BALLAST_WEIGHTS,
-    END_YEAR,
-    MAPPING_DF,
-    PITCHER_PREDICTOR_SUBSET,
-    BATTER_PREDICTOR_SUBSET,
-)
+import config
 
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(module)s - %(message)s')
+    
 
 # --- STATCAST FUNCTIONS ---
 def process_statcast_data(df: pl.DataFrame,) -> pl.DataFrame:
@@ -27,7 +17,7 @@ def process_statcast_data(df: pl.DataFrame,) -> pl.DataFrame:
     """
     df = (
         df
-        .select(RAW_COLS_TO_KEEP)
+        .select(config.RAW_COLS_TO_KEEP)
     )
 
     # Sort data to ensure 'last()' picks the final pitch event
@@ -50,14 +40,14 @@ def process_statcast_data(df: pl.DataFrame,) -> pl.DataFrame:
             .when(pl.col("events") == "double").then(pl.lit(2))
             .when(pl.col("events") == "triple").then(pl.lit(3))
             .when(pl.col("events") == "home_run").then(pl.lit(4))
-            .when(pl.col("events").is_in(K_EVENTS)).then(pl.lit(5))
-            .when(pl.col("events").is_in(BB_EVENTS)).then(pl.lit(6))
-            .when(pl.col("events").is_in(HBP_EVENTS)).then(pl.lit(7))
-            .when(pl.col("events").is_in(OUT_IN_PLAY_EVENTS)).then(pl.lit(0))
+            .when(pl.col("events").is_in(config.K_EVENTS)).then(pl.lit(5))
+            .when(pl.col("events").is_in(config.BB_EVENTS)).then(pl.lit(6))
+            .when(pl.col("events").is_in(config.HBP_EVENTS)).then(pl.lit(7))
+            .when(pl.col("events").is_in(config.OUT_IN_PLAY_EVENTS)).then(pl.lit(0))
             .otherwise(pl.lit(99)) # Assign 99 to nulls or any other unmapped event
-            .alias(OUTCOME_COL_NAME)
+            .alias(config.OUTCOME_COL_NAME)
         )
-        .filter(pl.col(OUTCOME_COL_NAME) != 99)
+        .filter(pl.col(config.OUTCOME_COL_NAME) != 99)
     )
 
     return df_with_outcome
@@ -226,7 +216,7 @@ def calculate_cumulative_pitcher_stats(df: pl.DataFrame) -> pl.DataFrame:
     return df
 
 
-def calculate_ballasted_batter_stats(df: pl.DataFrame, lg_avgs=LEAGUE_AVG_RATES, ballast_weights=BALLAST_WEIGHTS) -> pl.DataFrame:
+def calculate_ballasted_batter_stats(df: pl.DataFrame, lg_avgs=config.LEAGUE_AVG_RATES, ballast_weights=config.BALLAST_WEIGHTS) -> pl.DataFrame:
     """
     Calculate ballasted stats for batters.
     """
@@ -267,7 +257,7 @@ def calculate_ballasted_batter_stats(df: pl.DataFrame, lg_avgs=LEAGUE_AVG_RATES,
     return df
 
 
-def calculate_ballasted_pitcher_stats(df: pl.DataFrame, lg_avgs=LEAGUE_AVG_RATES, ballast_weights=BALLAST_WEIGHTS) -> pl.DataFrame:
+def calculate_ballasted_pitcher_stats(df: pl.DataFrame, lg_avgs=config.LEAGUE_AVG_RATES, ballast_weights=config.BALLAST_WEIGHTS) -> pl.DataFrame:
     """
     Calculate ballasted stats for pitchers.
     """
@@ -405,7 +395,7 @@ def calculate_defensive_innings_played(df: pl.DataFrame) -> pl.DataFrame:
     return df_total_innings
 
 
-def calculate_cumulative_defensive_stats(df: pl.DataFrame, df_total_innings: pl.DataFrame, end_year=END_YEAR) -> pl.DataFrame:
+def calculate_cumulative_defensive_stats(df: pl.DataFrame, df_total_innings: pl.DataFrame, end_year=config.END_YEAR) -> pl.DataFrame:
     """
     Calculate cumulative defensive stats for each player.
     """
@@ -495,186 +485,144 @@ def calculate_park_factors(df: pl.DataFrame) -> pl.DataFrame:
 
 def prepare_simulation_inputs(
     game_info: dict,
-    home_lineup_ids: list[int], # List of player_ids for home lineup
-    away_lineup_ids: list[int], # List of player_ids for away lineup
-    home_pitcher_id: int,
-    away_pitcher_id: int,
-    # Add functions for fetching actual player data here, or data directly
-    player_projections_bat_df: pl.DataFrame, # Pre-fetched daily batting projections
-    player_projections_pit_df: pl.DataFrame, # Pre-fetched daily pitching projections
-    player_defense_ratings_df: pl.DataFrame, # Pre-fetched defensive ratings (e.g., oaa_per_inning)
-    park_factors_df: pl.DataFrame # Pre-fetched park factors
+    home_lineup_data: dict, # From statsapi: {'home': [player_ids], 'home_pitcher_id': id, 'home_fielders': {pos: id}}
+    away_lineup_data: dict, # From statsapi: {'away': [player_ids], 'away_pitcher_id': id, 'away_fielders': {pos: id}}
+    # Pre-loaded, year-shifted park factors DF and player cumulative defense DF
+    park_factors_df: pl.DataFrame, # Columns: team_abbr, game_year (shifted), park_factor_input
+    player_defense_df: pl.DataFrame # Columns: player_id, year, cumulative_oaa_prior (or other metric)
 ):
     """
-    Prepares all necessary structured inputs for the simulate_first_three_innings function.
+    Prepares all necessary structured inputs for the simulate_first_three_innings function
+    for a specific upcoming game.
 
     Args:
-        game_info (dict): Dictionary containing game details from statsapi schedule.
-        home_lineup_ids (list): List of player_ids for the home team's lineup.
-        away_lineup_ids (list): List of player_ids for the away team's lineup.
-        home_pitcher_id (int): Player ID of the home starting pitcher.
-        away_pitcher_id (int): Player ID of the away starting pitcher.
-        player_projections_bat_df (pl.DataFrame): DataFrame of daily batting projections.
-        player_projections_pit_df (pl.DataFrame): DataFrame of daily pitching projections.
-        player_defense_ratings_df (pl.DataFrame): DataFrame of player defensive ratings.
-        park_factors_df (pl.DataFrame): DataFrame of park factors.
-
+        game_info (dict): From statsapi schedule.
+        home_lineup_data (dict): Contains 'lineup_ids', 'pitcher_id', 'fielders' (dict mapping pos to player_id).
+        away_lineup_data (dict): Contains 'lineup_ids', 'pitcher_id', 'fielders'.
+        park_factors_df (pl.DataFrame): Pre-processed and year-shifted park factors.
+        player_defense_df (pl.DataFrame): Pre-processed player defensive ratings (e.g., cumulative_oaa_prior).
 
     Returns:
-        dict: A dictionary containing:
-            'home_lineup_with_stats': List of dicts for home batters.
-            'away_lineup_with_stats': List of dicts for away batters.
-            'home_pitcher_inputs': Dict for home pitcher.
-            'away_pitcher_inputs': Dict for away pitcher.
-            'game_context': Dict with park factor, team defenses.
-            Returns None if essential data is missing.
+        dict or None: Containing 'home_lineup_with_stats', 'away_lineup_with_stats',
+                      'home_pitcher_inputs', 'away_pitcher_inputs', 'game_context'.
+                      Returns None if essential data is missing.
     """
-    logging.info(f"Preparing simulation inputs for game_pk: {game_info.get('game_id')}")
-
     try:
-        game_year = datetime.fromisoformat(game_info['game_date']).year
-        home_team_name = game_info['home_name']
-        away_team_name = game_info['away_name']
-
-        # # Get 3-letter abbreviations using the mapping from config
-        # home_team_abbr = MAPPING_DF.get(home_team_name)
-        # away_team_abbr = MAPPING_DF.get(away_team_name)
-
-        if not home_team_abbr or not away_team_abbr:
-            logging.error(f"Could not map team names to abbreviations: {home_team_name}, {away_team_name}")
-            return None
+        game_pk = game_info['game_id']
+        logging.info(f"Preparing simulation inputs for game_pk: {game_pk}")
+        game_year = datetime.datetime.fromisoformat(game_info['game_date']).year
+        venue_id = game_info['venue_id']
 
         # --- 1. Get Park Factor ---
         park_factor_row = park_factors_df.filter(
-            (pl.col("team_abbr") == home_team_abbr) & (pl.col("year") == game_year)
-            # Assumes park_factors_df has 'team_abbr', 'game_year', 'park_factor_input'
-            # and game_year in park_factors_df is the year the factor *applies to*
+            (pl.col("venue_id") == venue_id) & (pl.col("game_year") == game_year)
         )
-        park_factor = 100.0 # Default neutral
+        park_factor = 100.0  # Default neutral
         if not park_factor_row.is_empty():
             park_factor = park_factor_row.select("park_factor_input").item()
         else:
-            logging.warning(f"Park factor not found for {home_team_abbr} year {game_year}. Using default 100.0.")
+            logging.warning(f"Park factor not found for {venue_id}, year {game_year}. Using default 100.0.")
 
+        # --- 2. Collect All Player IDs and Fetch Projections ---
+        all_batter_ids = list(set(home_lineup_data['lineup_ids'] + away_lineup_data['lineup_ids']))
+        all_pitcher_ids = list(set([home_lineup_data['pitcher_id'], away_lineup_data['pitcher_id']]))
+        # Add fielder IDs for fetching their stand/p_throws if needed for defense logic,
+        # or if defensive stats are also part of their general projection profile.
+        all_player_ids_for_projections = list(set(all_batter_ids + all_pitcher_ids))
 
-        # --- 2. Prepare Player Projections ---
-        # Collect all unique player IDs involved
-        all_batter_ids = list(set(home_lineup_ids + away_lineup_ids))
-        all_pitcher_ids = list(set([home_pitcher_id, away_pitcher_id]))
+        # Fetch projections for these specific players for today
+        # These fetcher functions should return DataFrames with player_id and the necessary stat columns
+        # The column names in the returned DFs should match config.BATTER_PREDICTOR_SUBSET / PITCHER_PREDICTOR_SUBSET
+        logging.info(f"Fetching projections for {len(all_player_ids_for_projections)} players...")
+        # Assume date_str for projections is derived from game_info['game_date']
+        final_bat_projections_path = f"{config.BASE_FILE_PATH}fangraphs_bat_proj.parquet"
+        final_pit_projections_path = f"{config.BASE_FILE_PATH}fangraphs_pit_proj.parquet"
+        # Load projections from parquet files saved by main_daily_trigger
+        bat_projections_df = pl.read_parquet(final_bat_projections_path).filter(
+            pl.col("player_id").is_in(all_batter_ids)
+        )
+        pit_projections_df = pl.read_parquet(final_pit_projections_path).filter(
+            pl.col("player_id").is_in(all_pitcher_ids)
+        )
 
-        # Filter pre-fetched projections for relevant players
-        # Assumes player_projections_bat_df has 'player_id' and all batter_stat_input columns
-        # Assumes player_projections_pit_df has 'player_id' and all pitcher_stat_input columns
-        # Also need 'stand' for batters and 'p_throws' for pitchers if not already in projection columns
-        
-        batter_projections_dict = {
-            row['player_id']: row for row in player_projections_bat_df.filter(
-                pl.col('player_id').is_in(all_batter_ids)
-            ).to_dicts()
-        }
-        pitcher_projections_dict = {
-            row['player_id']: row for row in player_projections_pit_df.filter(
-                pl.col('player_id').is_in(all_pitcher_ids)
-            ).to_dicts()
-        }
+        if bat_projections_df is None or pit_projections_df is None:
+            logging.error("Failed to fetch necessary player projections.")
+            return None
 
-        # --- Helper to create lineup with stats ---
+        # Convert to dictionaries for easier lookup: player_id -> {stat: value, ...}
+        bat_projections_dict = {row['player_id']: row for row in bat_projections_df.to_dicts()}
+        pit_projections_dict = {row['player_id']: row for row in pit_projections_df.to_dicts()}
+
+        # --- 3. Prepare Lineups with Stats ---
         def _get_lineup_with_stats(lineup_ids, projections_dict):
             lineup_with_stats = []
             for player_id in lineup_ids:
                 stats = projections_dict.get(player_id)
                 if stats:
-                    # Ensure all necessary predictor cols are present, default if not
-                    player_data = {col: stats.get(col, 0.0) for col in BATTER_PREDICTOR_SUBSET} # Define this list in config
-                    player_data['stand'] = stats.get('stand', 'R') # Get stand
+                    # Select only the columns defined in the subset and 'stand'
+                    player_data = {col: stats.get(col, 0.0) for col in config.BATTER_PREDICTOR_SUBSET}
+                    player_data['stand'] = stats.get('stand', 'R') # Ensure 'stand' is in projections
                     lineup_with_stats.append(player_data)
                 else:
-                    logging.warning(f"No projections found for batter ID: {player_id}. Omitting from lineup.")
+                    logging.warning(f"No projections found for batter ID: {player_id}. Omitting.")
             return lineup_with_stats
 
-        home_lineup_with_stats = _get_lineup_with_stats(home_lineup_ids, batter_projections_dict)
-        away_lineup_with_stats = _get_lineup_with_stats(away_lineup_ids, batter_projections_dict)
+        home_lineup_with_stats = _get_lineup_with_stats(home_lineup_data['lineup_ids'], bat_projections_dict)
+        away_lineup_with_stats = _get_lineup_with_stats(away_lineup_data['lineup_ids'], bat_projections_dict)
 
-        # --- Prepare Pitcher Inputs ---
-        home_pitcher_stats = pitcher_projections_dict.get(home_pitcher_id)
-        away_pitcher_stats = pitcher_projections_dict.get(away_pitcher_id)
-
-        if not home_pitcher_stats or not away_pitcher_stats:
-            logging.error("Missing starting pitcher projections.")
+        if not home_lineup_with_stats or not away_lineup_with_stats:
+            logging.error("Could not prepare full lineups with stats.")
             return None
 
-        # Ensure all necessary predictor cols are present, default if not
-        final_home_pitcher_inputs = {col: home_pitcher_stats.get(col, 0.0) for col in PITCHER_PREDICTOR_SUBSET} # Define in config
-        final_home_pitcher_inputs['p_throws'] = home_pitcher_stats.get('p_throws', 'R') # Get p_throws
+        # --- 4. Prepare Pitcher Inputs ---
+        home_pitcher_proj = pit_projections_dict.get(home_lineup_data['pitcher_id'])
+        away_pitcher_proj = pit_projections_dict.get(away_lineup_data['pitcher_id'])
 
-        final_away_pitcher_inputs = {col: away_pitcher_stats.get(col, 0.0) for col in PITCHER_PREDICTOR_SUBSET}
-        final_away_pitcher_inputs['p_throws'] = away_pitcher_stats.get('p_throws', 'R')
+        if not home_pitcher_proj or not away_pitcher_proj:
+            logging.error("Missing projections for one or both starting pitchers.")
+            return None
 
-        # --- 3. Calculate Team Defense Ratings ---
-        # Assumes player_defense_ratings_df has 'player_id', 'year', 'oaa_per_inning'
-        # And 'year' in player_defense_ratings_df refers to the year the rating is FOR.
-        
-        current_year_defense = player_defense_ratings_df.filter(pl.col('year') == game_year)
-        defense_dict = {row['player_id']: row['oaa_per_inning'] for row in current_year_defense.to_dicts()}
+        final_home_pitcher_inputs = {col: home_pitcher_proj.get(col, 0.0) for col in config.PITCHER_PREDICTOR_SUBSET}
+        final_home_pitcher_inputs['p_throws'] = home_pitcher_proj.get('p_throws', 'R') # Ensure 'p_throws' is in projections
 
-        def _calculate_team_defense(lineup_ids, defense_ratings_dict):
-            total_oaa_rating = 0
-            num_fielders_found = 0
-            # Lineup IDs are for batters; for defense, we ideally need the 8 fielders.
-            # This is a simplification if lineup_ids represent the batters 1-9.
-            # A more accurate approach would be to get the specific 8 fielders for that team.
-            # For now, let's assume the top 8 of lineup_ids are representative or you have actual fielders.
-            fielding_player_ids = lineup_ids[:8] # Crude assumption, lineup != fielding positions usually
+        final_away_pitcher_inputs = {col: away_pitcher_proj.get(col, 0.0) for col in config.PITCHER_PREDICTOR_SUBSET}
+        final_away_pitcher_inputs['p_throws'] = away_pitcher_proj.get('p_throws', 'R')
 
-            for player_id in fielding_player_ids: # Iterate through the 8 fielders
-                rating = defense_ratings_dict.get(player_id, 0.0) # Default to 0 if no rating
-                total_oaa_rating += rating
-                if player_id in defense_ratings_dict:
-                    num_fielders_found +=1
-            # Could return an average or a sum. Summing OAA per inning needs context of innings played together.
-            # Let's assume the 'oaa_per_inning' is a rate we can average for the team.
-            # A better approach is to sum total OAA from prior cumulative stats as planned before.
-            # For this example, we'll just sum the 'oaa_per_inning' of the present fielders.
-            # This part NEEDS to align with how 'team_defense_oaa_input' was created for training.
-            # Let's assume training used a sum of *prior* OAA, so we do the same here.
-            # We need player_defense_ratings_df to be df_final_cumulative from previous step.
-            # Let player_defense_ratings_df be the one with cumulative_oaa_prior and cumulative_innings_prior
-            
-            total_cumulative_oaa = 0
-            total_cumulative_innings = 0
-            for player_id in fielding_player_ids:
-                 player_def_row = player_defense_ratings_df.filter(
-                     (pl.col("player_id") == player_id) & (pl.col("year") == game_year)
-                 ) # year here should be the year the PA occurs, to get prior stats *for* this year
-                 if not player_def_row.is_empty():
-                      total_cumulative_oaa += player_def_row.select("cumulative_oaa_prior").item()
-                      total_cumulative_innings += player_def_row.select("cumulative_innings_prior").item()
+        # --- 5. Calculate Team Defense Ratings ---
+        # This needs to precisely match how team_defense_oaa_input was created for training.
+        # Assumes 'player_defense_df' has 'player_id', 'year', 'cumulative_oaa_prior'.
+        # 'year' here is game_year, so cumulative_oaa_prior is for *before* this season.
+        def _calculate_team_defense(fielder_id_list: list, defense_data: pl.DataFrame, current_game_year: int):
+            total_oaa_prior = 0
+            fielders_counted = 0
+            # fielder_id_list should be the 8 non-pitcher fielders
+            for player_id in fielder_id_list:
+                player_def_row = defense_data.filter(
+                    (pl.col("player_id") == player_id) & (pl.col("year") == current_game_year)
+                )
+                if not player_def_row.is_empty():
+                    total_oaa_prior += player_def_row.select("cumulative_oaa_prior").item(0,0)
+                    fielders_counted +=1
+            # If you expect 8 fielders, you might log a warning if fielders_counted < 8
+            logging.info(f"Team defense calculated based on {fielders_counted} fielders, sum of prior OAA: {total_oaa_prior}")
+            return total_oaa_prior
 
-            # This calculates an overall team defensive quality based on sum of prior OAA.
-            # The 'team_defense_oaa_input' during training was the sum of 8 fielders' prior OAA.
-            # For consistency, we should replicate that here.
-            # The input 'player_defense_ratings_df' should be the 'df_final_cumulative'
-            return total_cumulative_oaa # This is the 'team_defense_oaa_input'
+        # Ensure your lineup_data['home_fielders'] and ['away_fielders'] contains a list of 8 player_ids
+        home_team_defense_rating = _calculate_team_defense(
+            home_lineup_data['fielders_ids'], player_defense_df, game_year
+        )
+        away_team_defense_rating = _calculate_team_defense(
+            away_lineup_data['fielders_ids'], player_defense_df, game_year
+        )
 
-
-        home_team_defense_rating = _calculate_team_defense(home_lineup_ids, defense_dict) # If using oaa_per_inning
-        # If using cumulative:
-        # home_team_defense_rating = _calculate_team_defense(home_actual_fielders_ids, player_defense_ratings_df, game_year)
-
-
-        away_team_defense_rating = _calculate_team_defense(away_lineup_ids, defense_dict) # If using oaa_per_inning
-        # away_team_defense_rating = _calculate_team_defense(away_actual_fielders_ids, player_defense_ratings_df, game_year)
-
-
-        # --- 4. Assemble Game Context ---
+        # --- 6. Assemble Game Context for Simulation ---
         game_context_for_sim = {
             'park_factor_input': park_factor,
-            'home_team_defense_rating': home_team_defense_rating, # Used when away team is batting
-            'away_team_defense_rating': away_team_defense_rating  # Used when home team is batting
-            # 'is_batter_home' is handled inside simulate_single_inning
+            'home_team_defense_rating': home_team_defense_rating, # Defense by home team (faced by away batters)
+            'away_team_defense_rating': away_team_defense_rating  # Defense by away team (faced by home batters)
         }
 
-        # --- 5. Final Output Dictionary ---
+        # --- 7. Final Output Dictionary ---
         simulation_inputs = {
             'home_lineup_with_stats': home_lineup_with_stats,
             'away_lineup_with_stats': away_lineup_with_stats,
@@ -682,15 +630,9 @@ def prepare_simulation_inputs(
             'away_pitcher_inputs': final_away_pitcher_inputs,
             'game_context': game_context_for_sim
         }
-        logging.info(f"Successfully prepared simulation inputs for game_pk: {game_info.get('game_id')}")
+        logging.info(f"Successfully prepared all simulation inputs for game_pk: {game_pk}")
         return simulation_inputs
 
     except Exception as e:
-        logging.error(f"Error preparing simulation inputs for game_pk {game_info.get('game_id')}: {e}", exc_info=True)
+        logging.error(f"CRITICAL Error preparing simulation inputs for game_pk {game_info.get('game_id', 'UNKNOWN')}: {e}", exc_info=True)
         return None
-
-
-# Example Configuration placeholders (should be in config.py)
-# config.TEAM_NAME_TO_ABBR_MAPPING = {'Chicago Cubs': 'CHC', 'Chicago White Sox': 'CWS', ...}
-# config.BATTER_PREDICTOR_SUBSET = ['batter_k_pct_daily_input', 'batter_bb_pct_daily_input', ...] # List of input stat cols
-# config.PITCHER_PREDICTOR_SUBSET = ['pitcher_k_pct_a_daily_input', 'pitcher_bb_pct_a_daily_input', ...]
