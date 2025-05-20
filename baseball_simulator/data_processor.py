@@ -184,16 +184,16 @@ def calculate_cumulative_pitcher_stats(df: pl.DataFrame) -> pl.DataFrame:
     df = (
         df
         .with_columns([
-            pl.col("daily_pa_a").cum_sum().over("pitcher").sort_by("game_date").alias("tmp_cum_pa_a_prev_day"),
-            pl.col("daily_ab_a").cum_sum().over("pitcher").sort_by("game_date").alias("tmp_cum_ab_a_prev_day"),
-            pl.col("daily_h_a").cum_sum().over("pitcher").sort_by("game_date").alias("tmp_cum_h_a_prev_day"),
-            pl.col("daily_k_a").cum_sum().over("pitcher").sort_by("game_date").alias("tmp_cum_k_a_prev_day"),
-            pl.col("daily_bb_a").cum_sum().over("pitcher").sort_by("game_date").alias("tmp_cum_bb_a_prev_day"),
-            pl.col("daily_hbp_a").cum_sum().over("pitcher").sort_by("game_date").alias("tmp_cum_hbp_a_prev_day"),
-            pl.col("daily_1b_a").cum_sum().over("pitcher").sort_by("game_date").alias("tmp_cum_1b_a_prev_day"),
-            pl.col("daily_2b_a").cum_sum().over("pitcher").sort_by("game_date").alias("tmp_cum_2b_a_prev_day"),
-            pl.col("daily_3b_a").cum_sum().over("pitcher").sort_by("game_date").alias("tmp_cum_3b_a_prev_day"),
-            pl.col("daily_hr_a").cum_sum().over("pitcher").sort_by("game_date").alias("tmp_cum_hr_a_prev_day"),
+            pl.col("daily_pa").cum_sum().over("pitcher").sort_by("game_date").alias("tmp_cum_pa_a_prev_day"),
+            pl.col("daily_ab").cum_sum().over("pitcher").sort_by("game_date").alias("tmp_cum_ab_a_prev_day"),
+            pl.col("daily_h").cum_sum().over("pitcher").sort_by("game_date").alias("tmp_cum_h_a_prev_day"),
+            pl.col("daily_k").cum_sum().over("pitcher").sort_by("game_date").alias("tmp_cum_k_a_prev_day"),
+            pl.col("daily_bb").cum_sum().over("pitcher").sort_by("game_date").alias("tmp_cum_bb_a_prev_day"),
+            pl.col("daily_hbp").cum_sum().over("pitcher").sort_by("game_date").alias("tmp_cum_hbp_a_prev_day"),
+            pl.col("daily_1b").cum_sum().over("pitcher").sort_by("game_date").alias("tmp_cum_1b_a_prev_day"),
+            pl.col("daily_2b").cum_sum().over("pitcher").sort_by("game_date").alias("tmp_cum_2b_a_prev_day"),
+            pl.col("daily_3b").cum_sum().over("pitcher").sort_by("game_date").alias("tmp_cum_3b_a_prev_day"),
+            pl.col("daily_hr").cum_sum().over("pitcher").sort_by("game_date").alias("tmp_cum_hr_a_prev_day"),
         ])
         .with_columns(
             pl.col("tmp_cum_pa_a_prev_day").shift(1).fill_null(0).alias("cum_pa_a_prev_day"),
