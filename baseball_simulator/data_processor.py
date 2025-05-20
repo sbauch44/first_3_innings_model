@@ -510,18 +510,18 @@ def prepare_simulation_inputs(
     try:
         game_pk = game_info['game_id']
         logging.info(f"Preparing simulation inputs for game_pk: {game_pk}")
-        game_year = datetime.datetime.fromisoformat(game_info['game_date']).year
+        year = datetime.datetime.fromisoformat(game_info['game_date']).year
         venue_id = game_info['venue_id']
 
         # --- 1. Get Park Factor ---
         park_factor_row = park_factors_df.filter(
-            (pl.col("venue_id") == venue_id) & (pl.col("game_year") == game_year)
+            (pl.col("venue_id") == venue_id) & (pl.col("year") == str(year))
         )
         park_factor = 100.0  # Default neutral
         if not park_factor_row.is_empty():
             park_factor = park_factor_row.select("park_factor_input").item()
         else:
-            logging.warning(f"Park factor not found for {venue_id}, year {game_year}. Using default 100.0.")
+            logging.warning(f"Park factor not found for {venue_id}, year {year}. Using default 100.0.")
 
         # --- 2. Collect All Player IDs and Fetch Projections ---
         all_batter_ids = list(set(home_lineup_data['lineup_ids'] + away_lineup_data['lineup_ids']))
@@ -609,10 +609,10 @@ def prepare_simulation_inputs(
 
         # Ensure your lineup_data['home_fielders'] and ['away_fielders'] contains a list of 8 player_ids
         home_team_defense_rating = _calculate_team_defense(
-            home_lineup_data['fielders_ids'], player_defense_df, game_year
+            home_lineup_data['fielders_ids'], player_defense_df, year
         )
         away_team_defense_rating = _calculate_team_defense(
-            away_lineup_data['fielders_ids'], player_defense_df, game_year
+            away_lineup_data['fielders_ids'], player_defense_df, year
         )
 
         # --- 6. Assemble Game Context for Simulation ---

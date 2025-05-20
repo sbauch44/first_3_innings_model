@@ -42,6 +42,9 @@ def run_pre_game_simulation(game_pk):
     # Need game_info containing home/away team IDs, venue etc. from schedule first
     # This might need to be passed in or fetched again based on game_pk
     game_info = data_fetcher.get_game_info(game_pk) 
+    if not game_info:
+        logging.error(f'Could not get game info for {game_pk}. Aborting.')
+        return
     lineup_data = data_fetcher.get_batting_orders(game_pk)
     if not lineup_data or not lineup_data.get('home') or not lineup_data.get('away'):
         logging.error(f"Could not get lineups for {game_pk}. Aborting.")
