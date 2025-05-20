@@ -7,6 +7,7 @@ import analysis
 import config # To get column names etc.
 import sys
 import logging
+import sklearn
 
 def run_pre_game_simulation(game_pk):
     """

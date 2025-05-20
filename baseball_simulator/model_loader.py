@@ -1,6 +1,7 @@
 import arviz as az
 import joblib
 from pathlib import Path
+import sklearn
 
 class ModelLoader:
     """
