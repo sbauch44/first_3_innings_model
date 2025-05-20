@@ -207,7 +207,7 @@ def run_incremental_update_and_feature_recalc():
     
     try:
         logging.info("Transforming Fangraphs pitching projections data...")
-        fangraphs_pit_proj_df = data_fetcher.fetch_fangraphs_projections('bat')
+        fangraphs_pit_proj_df = data_fetcher.fetch_fangraphs_projections('pit')
         if fangraphs_pit_proj_df is None or fangraphs_pit_proj_df.is_empty():
             logging.info("No new Fangraphs pitching projections data found.")
             return True
