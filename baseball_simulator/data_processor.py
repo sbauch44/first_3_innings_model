@@ -512,7 +512,7 @@ def prepare_simulation_inputs(
         logging.info(f"Preparing simulation inputs for game_pk: {game_pk}")
         year = datetime.datetime.fromisoformat(game_info['game_date']).year
         venue_id = game_info['venue_id']
-        
+
         # # Corrected filter line
         park_factor_row = park_factors_df.filter(
             (pl.col("venue_id") == venue_id) & (pl.col("year") == year)
@@ -540,10 +540,10 @@ def prepare_simulation_inputs(
         final_pit_projections_path = f"{config.BASE_FILE_PATH}fangraphs_pit_projections.parquet"
         # Load projections from parquet files saved by main_daily_trigger
         bat_projections_df = pl.read_parquet(final_bat_projections_path).filter(
-            pl.col("player_id").is_in(all_batter_ids)
+            pl.col("xMLBAMID").is_in(all_batter_ids)
         )
         pit_projections_df = pl.read_parquet(final_pit_projections_path).filter(
-            pl.col("player_id").is_in(all_pitcher_ids)
+            pl.col("xMLBAMID").is_in(all_pitcher_ids)
         )
 
         if bat_projections_df is None or pit_projections_df is None:
@@ -551,8 +551,8 @@ def prepare_simulation_inputs(
             return None
 
         # Convert to dictionaries for easier lookup: player_id -> {stat: value, ...}
-        bat_projections_dict = {row['player_id']: row for row in bat_projections_df.to_dicts()}
-        pit_projections_dict = {row['player_id']: row for row in pit_projections_df.to_dicts()}
+        bat_projections_dict = {row['xMLBAMID']: row for row in bat_projections_df.to_dicts()}
+        pit_projections_dict = {row['xMLBAMID']: row for row in pit_projections_df.to_dicts()}
 
         # --- 3. Prepare Lineups with Stats ---
         def _get_lineup_with_stats(lineup_ids, projections_dict):
