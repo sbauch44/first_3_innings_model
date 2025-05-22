@@ -70,6 +70,9 @@ LEAGUE_AVG_RATES = {
     'lg_3b_pct': 0.0035882083115064234, 
     'lg_hr_pct': 0.030792907181573653, 
     'lg_out_pct': 0.6889821376710302,
+    'gidp_rate_if_gb_opportunity': 0.13, # estimate from Gemini
+    'rate_1st_to_3rd_on_single': 0.28, # estimate from Gemini
+    'rate_score_from_1st_on_double': 0.45, # estimate from Gemini
 }
 
 # Ballast Weights (Stabilization Points)
