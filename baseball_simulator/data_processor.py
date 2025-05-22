@@ -476,8 +476,9 @@ def calculate_park_factors(df: pl.DataFrame) -> pl.DataFrame:
             value_name='park_factor'
         )
         .with_columns(
-            year = pl.col('year').str.replace('metric_value_', '').cast(pl.Int64),
+            year = pl.col('year').str.replace('metric_value_', '').cast(pl.Int32),
             park_factor = pl.col('park_factor').cast(pl.Float64),
+            venue_id = pl.col('venue_id').cast(pl.Int32),
         )
     )
     return clean_park_factors
@@ -513,10 +514,25 @@ def prepare_simulation_inputs(
         year = datetime.datetime.fromisoformat(game_info['game_date']).year
         venue_id = game_info['venue_id']
 
-        # --- 1. Get Park Factor ---
+        # # Convert venue_id_from_game_info to integer
+        # try:
+        #     venue_id_for_filter = int(venue_id)
+        # except ValueError:
+        #     logging.error(f"Could not convert venue_id '{venue_id}' to integer for game_pk {game_pk}.")
+        #     # Handle error appropriately, perhaps by returning None or raising an exception
+        #     # For now, let's assume it must be convertible or critical error logging will catch it
+        #     raise # Or return None if this should lead to aborting simulation input prep
+
+        # # For debugging, print types (optional, remove after fixing)
+        # logging.debug(f"Filtering park factors with venue_id (type: {type(venue_id_for_filter)}, value: {venue_id_for_filter}) "
+        #             f"and game_year (type: {type(year)}, value: {year})")
+        # logging.debug(f"Park factors df schema: {park_factors_df.schema}")
+
+        # # Corrected filter line
         park_factor_row = park_factors_df.filter(
-            (pl.col("venue_id") == venue_id) & (pl.col("year") == str(year))
+            (pl.col("venue_id") == venue_id) & (pl.col("year") == year)
         )
+
         park_factor = 100.0  # Default neutral
         if not park_factor_row.is_empty():
             park_factor = park_factor_row.select("park_factor_input").item()

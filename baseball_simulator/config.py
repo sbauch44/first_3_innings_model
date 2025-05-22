@@ -233,3 +233,28 @@ MAPPING_DF = (
         "team_abbr": list(team_mapping.keys()),
     })
 )
+
+
+FANGRAPHS_COOKIES = {
+    'fg_uuid': '178ccbc1-6901-4f69-8300-8bf3c1248d98',
+    'usprivacy': '1N--',
+    'wordpress_logged_in_0cae6f5cb929d209043cb97f8c2eee44': 'sb4422%7C1776720185%7CeRCHOYBE0Q23GmAO3ptRfFSgAT9cstCs9FQsaJdgIdY%7C970d7f02f4b7640c9057580d54edfbcdc20e73bcc2a2be00fc3c429cf9c0b448',
+    'wp_automatewoo_visitor_0cae6f5cb929d209043cb97f8c2eee44': 'gq3g22frpm7sstlukqjb',
+    'fg_is_member': 'true',
+}
+
+FANGRAPHS_HEADERS = {
+    'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+    'accept-language': 'en-US,en;q=0.9',
+    'cache-control': 'max-age=0',
+    'priority': 'u=0, i',
+    'sec-ch-ua': '"Chromium";v="136", "Google Chrome";v="136", "Not.A/Brand";v="99"',
+    'sec-ch-ua-mobile': '?0',
+    'sec-ch-ua-platform': '"Windows"',
+    'sec-fetch-dest': 'document',
+    'sec-fetch-mode': 'navigate',
+    'sec-fetch-site': 'same-origin',
+    'sec-fetch-user': '?1',
+    'upgrade-insecure-requests': '1',
+    'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36',
+}
