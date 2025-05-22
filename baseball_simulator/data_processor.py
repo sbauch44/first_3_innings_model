@@ -519,7 +519,7 @@ def prepare_simulation_inputs(
 
         park_factor = 100.0  # Default neutral
         if not park_factor_row.is_empty():
-            park_factor = park_factor_row.select("park_factor_input").item()
+            park_factor = park_factor_row.select("park_factor").item()
         else:
             logging.warning(f"Park factor not found for {venue_id}, year {year}. Using default 100.0.")
 
@@ -575,8 +575,8 @@ def prepare_simulation_inputs(
             return None
 
         # --- 4. Prepare Pitcher Inputs ---
-        home_pitcher_proj = pit_projections_dict.get(lineup_data['home']['pitcher_id'])
-        away_pitcher_proj = pit_projections_dict.get(lineup_data['away']['pitcher_id'])
+        home_pitcher_proj = pit_projections_dict.get(lineup_data['home']['pitcher_id'][0])
+        away_pitcher_proj = pit_projections_dict.get(lineup_data['away']['pitcher_id'][0])
 
         if not home_pitcher_proj or not away_pitcher_proj:
             logging.error("Missing projections for one or both starting pitchers.")
@@ -609,10 +609,10 @@ def prepare_simulation_inputs(
 
         # Ensure your lineup_data['home_fielders'] and ['away_fielders'] contains a list of 8 player_ids
         home_team_defense_rating = _calculate_team_defense(
-            lineup_data['home']['fielders_ids'], player_defense_df, year
+            lineup_data['home']['fielder_ids'], player_defense_df, year
         )
         away_team_defense_rating = _calculate_team_defense(
-            lineup_data['away']['fielders_ids'], player_defense_df, year
+            lineup_data['away']['fielder_ids'], player_defense_df, year
         )
 
         # --- 6. Assemble Game Context for Simulation ---
