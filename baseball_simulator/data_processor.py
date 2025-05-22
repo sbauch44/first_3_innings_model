@@ -497,8 +497,7 @@ def prepare_simulation_inputs(
 
     Args:
         game_info (dict): From statsapi schedule.
-        home_lineup_data (dict): Contains 'lineup_ids', 'pitcher_id', 'fielders' (dict mapping pos to player_id).
-        away_lineup_data (dict): Contains 'lineup_ids', 'pitcher_id', 'fielders'.
+        lineup_data (dict): Contains 'lineup_ids', 'pitcher_id', 'fielders' (dict mapping pos to player_id).
         park_factors_df (pl.DataFrame): Pre-processed and year-shifted park factors.
         player_defense_df (pl.DataFrame): Pre-processed player defensive ratings (e.g., cumulative_oaa_prior).
 
@@ -526,7 +525,7 @@ def prepare_simulation_inputs(
 
         # --- 2. Collect All Player IDs and Fetch Projections ---
         all_batter_ids = list(set(lineup_data['home']['batter_ids'] + lineup_data['away']['batter_ids']))
-        all_pitcher_ids = list(set([lineup_data['home']['pitcher_id'], lineup_data['away']['pitcher_id']]))
+        all_pitcher_ids = list(set(lineup_data['home']['pitcher_id'] + lineup_data['away']['pitcher_id']))
         # Add fielder IDs for fetching their stand/p_throws if needed for defense logic,
         # or if defensive stats are also part of their general projection profile.
         all_player_ids_for_projections = list(set(all_batter_ids + all_pitcher_ids))
