@@ -3,6 +3,7 @@ import polars as pl
 import requests
 import re
 import json
+import config
 import statsapi
 from pybaseball import (
     statcast,
@@ -44,31 +45,10 @@ def fetch_defensive_stats(YEAR):
     return pdf
 
 
-def fetch_fangraphs_projections(position=None):
+def fetch_fangraphs_projections(position=None, cookies=config.FANGRAPHS_COOKIES, headers=config.FANGRAPHS_HEADERS):
     if position not in ['pit', 'bat']:
         raise ValueError("Position must be 'pit' or 'bat'")
-    cookies = {
-        'fg_uuid': '178ccbc1-6901-4f69-8300-8bf3c1248d98',
-        'usprivacy': '1N--',
-        'wordpress_logged_in_0cae6f5cb929d209043cb97f8c2eee44': 'sb4422%7C1776720185%7CeRCHOYBE0Q23GmAO3ptRfFSgAT9cstCs9FQsaJdgIdY%7C970d7f02f4b7640c9057580d54edfbcdc20e73bcc2a2be00fc3c429cf9c0b448',
-        'wp_automatewoo_visitor_0cae6f5cb929d209043cb97f8c2eee44': 'gq3g22frpm7sstlukqjb',
-        'fg_is_member': 'true',
-    }
-    headers = {
-        'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
-        'accept-language': 'en-US,en;q=0.9',
-        'cache-control': 'max-age=0',
-        'priority': 'u=0, i',
-        'sec-ch-ua': '"Chromium";v="136", "Google Chrome";v="136", "Not.A/Brand";v="99"',
-        'sec-ch-ua-mobile': '?0',
-        'sec-ch-ua-platform': '"Windows"',
-        'sec-fetch-dest': 'document',
-        'sec-fetch-mode': 'navigate',
-        'sec-fetch-site': 'same-origin',
-        'sec-fetch-user': '?1',
-        'upgrade-insecure-requests': '1',
-        'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36',
-    }
+    
     params = {
         'type': 'steamerr',
         'stats': position,
@@ -90,13 +70,26 @@ def fetch_fangraphs_projections(position=None):
 
 def get_batting_orders(game_pk):
     game_json = statsapi.get('game',{'gamePk': game_pk})
-    batting_orders = {}
     boxscores = game_json["liveData"]["boxscore"]["teams"]
-    home = boxscores["home"]["battingOrder"]
-    away = boxscores["away"]["battingOrder"]
-    batting_orders["home"] = home
-    batting_orders["away"] = away
-    return batting_orders
+    home_batters = boxscores["home"]["battingOrder"]
+    away_batters = boxscores["away"]["battingOrder"]
+    home_pitchers = boxscores["home"]["pitchers"]
+    away_pitchers = boxscores["away"]["pitchers"]
+    
+    lineup_data = {
+        "home": {
+            'batter_ids': home_batters,
+            'pitcher_id': home_pitchers,
+            'fielder_ids': home_batters,
+        },
+        "away": {
+            'batter_ids': away_batters,
+            'pitcher_id': away_pitchers,
+            'fielder_ids': away_batters,
+        }
+    }
+    
+    return lineup_data
 
 
 def get_game_info(game_pk):

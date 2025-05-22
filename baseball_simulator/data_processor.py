@@ -486,8 +486,7 @@ def calculate_park_factors(df: pl.DataFrame) -> pl.DataFrame:
 
 def prepare_simulation_inputs(
     game_info: dict,
-    home_lineup_data: dict, # From statsapi: {'home': [player_ids], 'home_pitcher_id': id, 'home_fielders': {pos: id}}
-    away_lineup_data: dict, # From statsapi: {'away': [player_ids], 'away_pitcher_id': id, 'away_fielders': {pos: id}}
+    lineup_data: dict, # From statsapi: {'home': [player_ids], 'home_pitcher_id': id, 'home_fielders': {pos: id}}
     # Pre-loaded, year-shifted park factors DF and player cumulative defense DF
     park_factors_df: pl.DataFrame, # Columns: team_abbr, game_year (shifted), park_factor_input
     player_defense_df: pl.DataFrame # Columns: player_id, year, cumulative_oaa_prior (or other metric)
@@ -513,21 +512,7 @@ def prepare_simulation_inputs(
         logging.info(f"Preparing simulation inputs for game_pk: {game_pk}")
         year = datetime.datetime.fromisoformat(game_info['game_date']).year
         venue_id = game_info['venue_id']
-
-        # # Convert venue_id_from_game_info to integer
-        # try:
-        #     venue_id_for_filter = int(venue_id)
-        # except ValueError:
-        #     logging.error(f"Could not convert venue_id '{venue_id}' to integer for game_pk {game_pk}.")
-        #     # Handle error appropriately, perhaps by returning None or raising an exception
-        #     # For now, let's assume it must be convertible or critical error logging will catch it
-        #     raise # Or return None if this should lead to aborting simulation input prep
-
-        # # For debugging, print types (optional, remove after fixing)
-        # logging.debug(f"Filtering park factors with venue_id (type: {type(venue_id_for_filter)}, value: {venue_id_for_filter}) "
-        #             f"and game_year (type: {type(year)}, value: {year})")
-        # logging.debug(f"Park factors df schema: {park_factors_df.schema}")
-
+        
         # # Corrected filter line
         park_factor_row = park_factors_df.filter(
             (pl.col("venue_id") == venue_id) & (pl.col("year") == year)
@@ -540,8 +525,8 @@ def prepare_simulation_inputs(
             logging.warning(f"Park factor not found for {venue_id}, year {year}. Using default 100.0.")
 
         # --- 2. Collect All Player IDs and Fetch Projections ---
-        all_batter_ids = list(set(home_lineup_data['lineup_ids'] + away_lineup_data['lineup_ids']))
-        all_pitcher_ids = list(set([home_lineup_data['pitcher_id'], away_lineup_data['pitcher_id']]))
+        all_batter_ids = list(set(lineup_data['home']['batter_ids'] + lineup_data['away']['batter_ids']))
+        all_pitcher_ids = list(set([lineup_data['home']['pitcher_id'], lineup_data['away']['pitcher_id']]))
         # Add fielder IDs for fetching their stand/p_throws if needed for defense logic,
         # or if defensive stats are also part of their general projection profile.
         all_player_ids_for_projections = list(set(all_batter_ids + all_pitcher_ids))
@@ -583,16 +568,16 @@ def prepare_simulation_inputs(
                     logging.warning(f"No projections found for batter ID: {player_id}. Omitting.")
             return lineup_with_stats
 
-        home_lineup_with_stats = _get_lineup_with_stats(home_lineup_data['lineup_ids'], bat_projections_dict)
-        away_lineup_with_stats = _get_lineup_with_stats(away_lineup_data['lineup_ids'], bat_projections_dict)
+        home_lineup_with_stats = _get_lineup_with_stats(lineup_data['home']['batter_ids'], bat_projections_dict)
+        away_lineup_with_stats = _get_lineup_with_stats(lineup_data['away']['batter_ids'], bat_projections_dict)
 
         if not home_lineup_with_stats or not away_lineup_with_stats:
             logging.error("Could not prepare full lineups with stats.")
             return None
 
         # --- 4. Prepare Pitcher Inputs ---
-        home_pitcher_proj = pit_projections_dict.get(home_lineup_data['pitcher_id'])
-        away_pitcher_proj = pit_projections_dict.get(away_lineup_data['pitcher_id'])
+        home_pitcher_proj = pit_projections_dict.get(lineup_data['home']['pitcher_id'])
+        away_pitcher_proj = pit_projections_dict.get(lineup_data['away']['pitcher_id'])
 
         if not home_pitcher_proj or not away_pitcher_proj:
             logging.error("Missing projections for one or both starting pitchers.")
@@ -625,10 +610,10 @@ def prepare_simulation_inputs(
 
         # Ensure your lineup_data['home_fielders'] and ['away_fielders'] contains a list of 8 player_ids
         home_team_defense_rating = _calculate_team_defense(
-            home_lineup_data['fielders_ids'], player_defense_df, year
+            lineup_data['home']['fielders_ids'], player_defense_df, year
         )
         away_team_defense_rating = _calculate_team_defense(
-            away_lineup_data['fielders_ids'], player_defense_df, year
+            lineup_data['away']['fielders_ids'], player_defense_df, year
         )
 
         # --- 6. Assemble Game Context for Simulation ---
