@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import random
 import joblib
+from tqdm import tqdm
 import arviz as az
 from typing import Dict, List, Tuple, Any, Optional, Union
 
@@ -419,9 +420,7 @@ class BaseballSimulator:
         """
         all_results = []
         print(f"Running {num_sims} game simulations...")
-        for i in range(num_sims):
-            if i % 1000 == 0 and i > 0:
-                print(f"Completed {i} simulations...")
+        for i in tqdm(range(num_sims)):
             sim_result = self.simulate_first_three_innings(
                 home_lineup, away_lineup, home_pitcher_inputs, away_pitcher_inputs,
                 game_context
