@@ -63,8 +63,7 @@ def run_pre_game_simulation(game_pk):
         today_str = game_info['game_date']
         sim_inputs = data_processor.prepare_simulation_inputs(
             game_info=game_info, 
-            home_lineup_data=lineup_data['home'], 
-            away_lineup_data=lineup_data['away'],
+            lineup_data=lineup_data, 
             park_factors_df=park_factors_df, 
             player_defense_df=player_defense_df,
         )
