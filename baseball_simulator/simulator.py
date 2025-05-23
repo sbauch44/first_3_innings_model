@@ -4,6 +4,7 @@ import random
 import joblib
 from tqdm import tqdm
 import arviz as az
+import logging
 from typing import Dict, List, Tuple, Any, Optional, Union
 
 
@@ -39,6 +40,23 @@ class BaseballSimulator:
         
         # Default league average rates - can be overridden
         self.league_avg_rates = league_avg_rates
+
+        # --- Pre-calculate mean posterior parameters ---
+        logging.info("Pre-calculating mean posterior parameters") # Optional: for feedback
+        try:
+            self.mean_intercepts_val = self.idata.posterior["intercepts"].mean(dim=("chain", "draw")).values
+            self.mean_betas_val = self.idata.posterior["betas"].mean(dim=("chain", "draw")).values
+
+            # Get n_predictors from the shape of mean_betas_val for later checks
+            # Assuming mean_betas_val shape is (n_predictors, n_categories) or (n_predictors, n_categories-1)
+            self.n_model_predictors = self.mean_betas_val.shape[0]
+
+            logging.info("Mean posterior parameters pre-calculated successfully.") # Optional
+        except Exception as e:
+            logging.warning(f"FATAL ERROR: Could not pre-calculate mean posterior parameters during simulator initialization: {e}")
+            logging.info("Make sure 'intercepts' and 'betas' exist in idata.posterior and are correctly formatted.")
+            raise 
+        # --- End of pre-calculation ---
     
     def set_league_avg_rates(self, rates_dict: Dict[str, float]) -> None:
         """
@@ -64,8 +82,8 @@ class BaseballSimulator:
             input_list = [pa_inputs_dict[col] for col in self.predictor_cols]
             input_array = np.array(input_list).reshape(1, -1)  # Reshape to 2D array (1 row)
         except KeyError as e:
-            print(f"Error: Missing key {e} in pa_inputs_dict")
-            print(f"Required keys: {self.predictor_cols}")
+            logging.warning(f"Error: Missing key {e} in pa_inputs_dict")
+            logging.warning(f"Required keys: {self.predictor_cols}")
             raise
         
         # Use Pandas for easier column selection based on names for scaling
@@ -76,9 +94,9 @@ class BaseballSimulator:
         try:
             scaled_continuous_data = self.scaler.transform(continuous_data)  # Use transform, NOT fit_transform
         except Exception as e:
-            print(f"Error scaling data: {e}")
-            print(f"Input data shape for scaling: {continuous_data.shape}")
-            print(f"Scaler expects {self.scaler.n_features_in_} features.")
+            logging.warning(f"Error scaling data: {e}")
+            logging.warning(f"Input data shape for scaling: {continuous_data.shape}")
+            logging.warning(f"Scaler expects {self.scaler.n_features_in_} features.")
             raise
         
         # 3. Combine Features
@@ -90,37 +108,46 @@ class BaseballSimulator:
         # Convert categorical_data to float if needed for compatibility
         categorical_data = categorical_data.astype(float)
         X_new = np.concatenate([scaled_continuous_data, categorical_data], axis=1)
-        n_predictors = X_new.shape[1]
         
-        # 4. Use Mean Posterior Parameters
-        try:
-            mean_intercepts = self.idata.posterior["intercepts"].mean(dim=("chain", "draw")).values # type: ignore
-            mean_betas = self.idata.posterior["betas"].mean(dim=("chain", "draw")).values # type: ignore
-        except Exception as e:
-            print(f"Error accessing posterior samples in idata: {e}")
-            print("Make sure 'intercepts' and 'betas' were saved correctly.")
-            raise
-        
-        # Check shapes
+        n_input_features = X_new.shape[1] # Number of features in the current input
+
+        if n_input_features != self.n_model_predictors:
+            # This check is crucial if the number of predictors could vary or if there's a mismatch
+            # between predictor_cols used for input prep and what the model was trained on.
+            raise ValueError(
+                f"Mismatch in number of features. Input has {n_input_features}, "
+                f"but model (from beta shapes) expects {self.n_model_predictors}."
+            )
+
+        # 4. Use PRE-CALCULATED Mean Posterior Parameters
+        # We use self.mean_intercepts_val and self.mean_betas_val calculated in __init__
+        mean_intercepts = self.mean_intercepts_val
+        mean_betas = self.mean_betas_val
+
+        # Check shapes (now against the pre-calculated and stored shapes)
         expected_intercept_shape = (self.n_categories,)
-        expected_beta_shape = (n_predictors, self.n_categories)
-        
+        # The expected_beta_shape should now use self.n_model_predictors which was derived from the loaded betas
+        expected_beta_shape = (self.n_model_predictors, self.n_categories)
+
         if mean_intercepts.shape != expected_intercept_shape:
-            print(f"Warning: Mean intercepts shape mismatch. Expected {expected_intercept_shape}, got {mean_intercepts.shape}")
-            # Attempt to reshape or handle based on how reference category was added
+            logging.warning(f"Warning: Mean intercepts shape mismatch. Expected {expected_intercept_shape}, got {mean_intercepts.shape}")
             if mean_intercepts.shape == (self.n_categories - 1,):
                 mean_intercepts = np.concatenate([mean_intercepts, [0.0]])
+                self.mean_intercepts_val = mean_intercepts # Optionally update the stored value if you allow this modification
             else:
-                raise ValueError("Cannot resolve intercept shape mismatch.")
-        
+                raise ValueError("Cannot resolve intercept shape mismatch with pre-calculated values.")
+
         if mean_betas.shape != expected_beta_shape:
-            print(f"Warning: Mean betas shape mismatch. Expected {expected_beta_shape}, got {mean_betas.shape}")
-            # Attempt to reshape or handle based on how reference category was added
-            if mean_betas.shape == (n_predictors, self.n_categories - 1):
-                ref_betas = np.zeros((n_predictors, 1))
+            logging.warning(f"Warning: Mean betas shape mismatch. Expected {expected_beta_shape}, got {mean_betas.shape}")
+            if mean_betas.shape == (self.n_model_predictors, self.n_categories - 1):
+                ref_betas = np.zeros((self.n_model_predictors, 1))
                 mean_betas = np.concatenate([mean_betas, ref_betas], axis=1)
+                self.mean_betas_val = mean_betas # Optionally update the stored value
             else:
-                raise ValueError("Cannot resolve beta shape mismatch.")
+                raise ValueError("Cannot resolve beta shape mismatch with pre-calculated values.")
+
+        # 5. Calculate Linear Predictor (mu)
+        mu_mean = mean_intercepts + X_new @ mean_betas  # Shape (1, n_categories)
         
         # 5. Calculate Linear Predictor (mu)
         mu_mean = mean_intercepts + X_new @ mean_betas  # Shape (1, n_categories)
@@ -131,7 +158,7 @@ class BaseballSimulator:
         
         # Ensure probabilities sum roughly to 1
         if not np.isclose(np.sum(p_vector_mean), 1.0):
-            print(f"Warning: Probabilities do not sum to 1: {np.sum(p_vector_mean)}")
+            logging.warning(f"Warning: Probabilities do not sum to 1: {np.sum(p_vector_mean)}")
             # Normalize as fallback
             p_vector_mean = p_vector_mean / np.sum(p_vector_mean)
         
@@ -192,7 +219,7 @@ class BaseballSimulator:
                 is_platoon = 1 if (batter_stand == 'L' and pitcher_throws == 'R') or \
                                  (batter_stand == 'R' and pitcher_throws == 'L') else 0
             except KeyError as e:
-                print(f"Warning: Missing 'stand' or 'p_throws' in inputs: {e}. Assuming no platoon advantage.")
+                logging.warning(f"Warning: Missing 'stand' or 'p_throws' in inputs: {e}. Assuming no platoon advantage.")
                 is_platoon = 0
             
             pa_inputs = {
@@ -419,7 +446,7 @@ class BaseballSimulator:
             List of simulation results
         """
         all_results = []
-        print(f"Running {num_sims} game simulations...")
+        logging.info(f"Running {num_sims} game simulations...")
         for i in tqdm(range(num_sims)):
             sim_result = self.simulate_first_three_innings(
                 home_lineup, away_lineup, home_pitcher_inputs, away_pitcher_inputs,
@@ -501,7 +528,7 @@ class BaseballSimulator:
             try:
                 inning_num = int(inn_str.split('_')[1]) if '_' in inn_str else int(inn_str)
             except (IndexError, ValueError):
-                print(f"Warning: Could not parse inning number from key '{inn_str}'. Using as-is.")
+                logging.warning(f"Warning: Could not parse inning number from key '{inn_str}'. Using as-is.")
                 inning_num = inn_str
             
             for team, stats_data in teams_data.items():
