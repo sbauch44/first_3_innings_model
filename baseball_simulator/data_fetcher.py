@@ -9,7 +9,7 @@ from pybaseball import (
     statcast_fielding,
 )
 
-import config
+from baseball_simulator import config
 
 
 def fetch_statcast_data():
@@ -45,7 +45,9 @@ def fetch_defensive_stats(YEAR):
     return pdf
 
 
-def fetch_fangraphs_projections(position=None, cookies=config.FANGRAPHS_COOKIES, headers=config.FANGRAPHS_HEADERS):
+def fetch_fangraphs_projections(
+    position=None, cookies=config.FANGRAPHS_COOKIES, headers=config.FANGRAPHS_HEADERS
+):
     if position not in ["pit", "bat"]:
         raise ValueError("Position must be 'pit' or 'bat'")
 
@@ -59,7 +61,12 @@ def fetch_fangraphs_projections(position=None, cookies=config.FANGRAPHS_COOKIES,
         "z": "1747738554",
         "download": "1",
     }
-    response = requests.get("https://www.fangraphs.com/api/projections", params=params, cookies=cookies, headers=headers)
+    response = requests.get(
+        "https://www.fangraphs.com/api/projections",
+        params=params,
+        cookies=cookies,
+        headers=headers,
+    )
     if response.status_code != 200:
         raise Exception(f"Failed to fetch data: {response.status_code}")
     df = pl.DataFrame(response.json())
@@ -69,7 +76,7 @@ def fetch_fangraphs_projections(position=None, cookies=config.FANGRAPHS_COOKIES,
 
 
 def get_batting_orders(game_pk):
-    game_json = statsapi.get("game",{"gamePk": game_pk})
+    game_json = statsapi.get("game", {"gamePk": game_pk})
     boxscores = game_json["liveData"]["boxscore"]["teams"]
     home_batters = boxscores["home"]["battingOrder"]
     away_batters = boxscores["away"]["battingOrder"]
