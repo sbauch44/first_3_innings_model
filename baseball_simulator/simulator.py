@@ -10,13 +10,21 @@ from tqdm import tqdm
 class BaseballSimulator:
     """
     A simulator for baseball games using a Bayesian model for plate appearance outcomes.
-    
+
     This class loads a trained PyMC model and provides methods to simulate
     plate appearances, innings, and partial games.
     """
 
-    def __init__(self, idata, scaler, outcome_labels, predictor_cols, continuous_cols,
-                 categorical_cols, league_avg_rates):
+    def __init__(
+        self,
+        idata,
+        scaler,
+        outcome_labels,
+        predictor_cols,
+        continuous_cols,
+        categorical_cols,
+        league_avg_rates,
+    ):
         """
         Initialize the baseball simulator with model, scaler and model settings from the config file.
 
@@ -43,26 +51,38 @@ class BaseballSimulator:
         self.league_avg_rates = league_avg_rates
 
         # --- Pre-calculate mean posterior parameters ---
-        logging.info("Pre-calculating mean posterior parameters") # Optional: for feedback
+        logging.info(
+            "Pre-calculating mean posterior parameters"
+        )  # Optional: for feedback
         try:
-            self.mean_intercepts_val = self.idata.posterior["intercepts"].mean(dim=("chain", "draw")).values
-            self.mean_betas_val = self.idata.posterior["betas"].mean(dim=("chain", "draw")).values
+            self.mean_intercepts_val = (
+                self.idata.posterior["intercepts"].mean(dim=("chain", "draw")).values
+            )
+            self.mean_betas_val = (
+                self.idata.posterior["betas"].mean(dim=("chain", "draw")).values
+            )
 
             # Get n_predictors from the shape of mean_betas_val for later checks
             # Assuming mean_betas_val shape is (n_predictors, n_categories) or (n_predictors, n_categories-1)
             self.n_model_predictors = self.mean_betas_val.shape[0]
 
-            logging.info("Mean posterior parameters pre-calculated successfully.") # Optional
+            logging.info(
+                "Mean posterior parameters pre-calculated successfully."
+            )  # Optional
         except Exception as e:
-            logging.warning(f"FATAL ERROR: Could not pre-calculate mean posterior parameters during simulator initialization: {e}")
-            logging.info("Make sure 'intercepts' and 'betas' exist in idata.posterior and are correctly formatted.")
+            logging.warning(
+                f"FATAL ERROR: Could not pre-calculate mean posterior parameters during simulator initialization: {e}"
+            )
+            logging.info(
+                "Make sure 'intercepts' and 'betas' exist in idata.posterior and are correctly formatted."
+            )
             raise
         # --- End of pre-calculation ---
 
     def set_league_avg_rates(self, rates_dict: Dict[str, float]) -> None:
         """
         Update league average rates used in simulation.
-        
+
         Args:
             rates_dict: Dictionary containing rate names and values
 
@@ -72,10 +92,10 @@ class BaseballSimulator:
     def predict_pa_outcome_probs(self, pa_inputs_dict: Dict[str, float]) -> np.ndarray:
         """
         Predicts outcome probabilities for a single plate appearance using MEAN model posterior parameters.
-        
+
         Args:
             pa_inputs_dict: Dictionary with predictor names as keys and single values.
-            
+
         Returns:
             np.ndarray: A probability vector (sums to 1) for the PA outcomes. Shape: (n_categories,)
 
@@ -83,7 +103,9 @@ class BaseballSimulator:
         # 1. Prepare Input Data into correct order
         try:
             input_list = [pa_inputs_dict[col] for col in self.predictor_cols]
-            input_array = np.array(input_list).reshape(1, -1)  # Reshape to 2D array (1 row)
+            input_array = np.array(input_list).reshape(
+                1, -1
+            )  # Reshape to 2D array (1 row)
         except KeyError as e:
             logging.warning(f"Error: Missing key {e} in pa_inputs_dict")
             logging.warning(f"Required keys: {self.predictor_cols}")
@@ -95,7 +117,9 @@ class BaseballSimulator:
         # 2. Scale Continuous Features
         continuous_data = input_df[self.continuous_cols].values
         try:
-            scaled_continuous_data = self.scaler.transform(continuous_data)  # Use transform, NOT fit_transform
+            scaled_continuous_data = self.scaler.transform(
+                continuous_data
+            )  # Use transform, NOT fit_transform
         except Exception as e:
             logging.warning(f"Error scaling data: {e}")
             logging.warning(f"Input data shape for scaling: {continuous_data.shape}")
@@ -112,7 +136,7 @@ class BaseballSimulator:
         categorical_data = categorical_data.astype(float)
         X_new = np.concatenate([scaled_continuous_data, categorical_data], axis=1)
 
-        n_input_features = X_new.shape[1] # Number of features in the current input
+        n_input_features = X_new.shape[1]  # Number of features in the current input
 
         if n_input_features != self.n_model_predictors:
             # This check is crucial if the number of predictors could vary or if there's a mismatch
@@ -133,21 +157,29 @@ class BaseballSimulator:
         expected_beta_shape = (self.n_model_predictors, self.n_categories)
 
         if mean_intercepts.shape != expected_intercept_shape:
-            logging.warning(f"Warning: Mean intercepts shape mismatch. Expected {expected_intercept_shape}, got {mean_intercepts.shape}")
+            logging.warning(
+                f"Warning: Mean intercepts shape mismatch. Expected {expected_intercept_shape}, got {mean_intercepts.shape}"
+            )
             if mean_intercepts.shape == (self.n_categories - 1,):
                 mean_intercepts = np.concatenate([mean_intercepts, [0.0]])
-                self.mean_intercepts_val = mean_intercepts # Optionally update the stored value if you allow this modification
+                self.mean_intercepts_val = mean_intercepts  # Optionally update the stored value if you allow this modification
             else:
-                raise ValueError("Cannot resolve intercept shape mismatch with pre-calculated values.")
+                raise ValueError(
+                    "Cannot resolve intercept shape mismatch with pre-calculated values."
+                )
 
         if mean_betas.shape != expected_beta_shape:
-            logging.warning(f"Warning: Mean betas shape mismatch. Expected {expected_beta_shape}, got {mean_betas.shape}")
+            logging.warning(
+                f"Warning: Mean betas shape mismatch. Expected {expected_beta_shape}, got {mean_betas.shape}"
+            )
             if mean_betas.shape == (self.n_model_predictors, self.n_categories - 1):
                 ref_betas = np.zeros((self.n_model_predictors, 1))
                 mean_betas = np.concatenate([mean_betas, ref_betas], axis=1)
-                self.mean_betas_val = mean_betas # Optionally update the stored value
+                self.mean_betas_val = mean_betas  # Optionally update the stored value
             else:
-                raise ValueError("Cannot resolve beta shape mismatch with pre-calculated values.")
+                raise ValueError(
+                    "Cannot resolve beta shape mismatch with pre-calculated values."
+                )
 
         # 5. Calculate Linear Predictor (mu)
         mu_mean = mean_intercepts + X_new @ mean_betas  # Shape (1, n_categories)
@@ -161,7 +193,9 @@ class BaseballSimulator:
 
         # Ensure probabilities sum roughly to 1
         if not np.isclose(np.sum(p_vector_mean), 1.0):
-            logging.warning(f"Warning: Probabilities do not sum to 1: {np.sum(p_vector_mean)}")
+            logging.warning(
+                f"Warning: Probabilities do not sum to 1: {np.sum(p_vector_mean)}"
+            )
             # Normalize as fallback
             p_vector_mean = p_vector_mean / np.sum(p_vector_mean)
 
@@ -178,7 +212,7 @@ class BaseballSimulator:
     ) -> Tuple[int, int, int, int]:
         """
         Simulates a single half-inning with realistic base running.
-        
+
         Args:
             inning_num: The inning number being simulated
             is_top_inning: True if top half of inning (away team batting)
@@ -186,7 +220,7 @@ class BaseballSimulator:
             start_batter_idx: Index in lineup to start with
             pitcher_inputs: Dictionary with pitcher stats/inputs
             game_context: Dict containing park factor and team defense ratings
-            
+
         Returns:
             Tuple of (hits, runs, walks, next_batter_idx)
 
@@ -220,10 +254,16 @@ class BaseballSimulator:
             try:
                 batter_stand = current_batter_inputs["stand"]
                 pitcher_throws = pitcher_inputs["p_throws"]
-                is_platoon = 1 if (batter_stand == "L" and pitcher_throws == "R") or \
-                                 (batter_stand == "R" and pitcher_throws == "L") else 0
+                is_platoon = (
+                    1
+                    if (batter_stand == "L" and pitcher_throws == "R")
+                    or (batter_stand == "R" and pitcher_throws == "L")
+                    else 0
+                )
             except KeyError as e:
-                logging.warning(f"Warning: Missing 'stand' or 'p_throws' in inputs: {e}. Assuming no platoon advantage.")
+                logging.warning(
+                    f"Warning: Missing 'stand' or 'p_throws' in inputs: {e}. Assuming no platoon advantage."
+                )
                 is_platoon = 0
 
             pa_inputs = {
@@ -233,12 +273,18 @@ class BaseballSimulator:
                 "is_platoon_adv": is_platoon,
             }
             # Remove non-predictor keys if they exist from batter/pitcher inputs
-            pa_inputs = {k: v for k, v in pa_inputs.items() if k in self.predictor_cols or k in ["stand", "p_throws"]}
+            pa_inputs = {
+                k: v
+                for k, v in pa_inputs.items()
+                if k in self.predictor_cols or k in ["stand", "p_throws"]
+            }
 
             outcome_probs = self.predict_pa_outcome_probs(pa_inputs)
 
             possible_outcomes = list(self.outcome_labels.keys())
-            simulated_outcome_code = np.random.choice(possible_outcomes, p=outcome_probs)
+            simulated_outcome_code = np.random.choice(
+                possible_outcomes, p=outcome_probs
+            )
             outcome_label = self.outcome_labels[simulated_outcome_code]
 
             new_bases = list(bases)
@@ -273,8 +319,8 @@ class BaseballSimulator:
             elif outcome_label == "Single":
                 pa_hit += 1
                 # Advance runners (simplified rules + probabilistic 1st->3rd)
-                runner_3b_scores = (bases[2] == 1)
-                runner_2b_scores = (bases[1] == 1)  # Assume scores from 2nd
+                runner_3b_scores = bases[2] == 1
+                runner_2b_scores = bases[1] == 1  # Assume scores from 2nd
                 runner_1b_to_3rd = False
                 runner_1b_to_2nd = False
 
@@ -284,7 +330,10 @@ class BaseballSimulator:
                     runs_this_pa += 1
 
                 if bases[0] == 1:
-                    if random.random() < self.league_avg_rates["rate_1st_to_3rd_on_single"]:
+                    if (
+                        random.random()
+                        < self.league_avg_rates["rate_1st_to_3rd_on_single"]
+                    ):
                         runner_1b_to_3rd = True
                     else:
                         runner_1b_to_2nd = True
@@ -293,7 +342,7 @@ class BaseballSimulator:
                 new_bases = [0, 0, 0]
                 if runner_1b_to_3rd:
                     new_bases[2] = 1
-                elif runner_2b_scores == False and bases[1] == 1:
+                elif runner_2b_scores == False and bases[1] == 1:  # noqa: E712
                     new_bases[2] = 1  # R2 holds 3rd if didn't score
                 if runner_1b_to_2nd:
                     new_bases[1] = 1
@@ -301,9 +350,8 @@ class BaseballSimulator:
 
             elif outcome_label == "Double":
                 pa_hit += 1
-                runner_3b_scores = (bases[2] == 1)
-                runner_2b_scores = (bases[1] == 1)
-                runner_1b_scores = False
+                runner_3b_scores = bases[2] == 1
+                runner_2b_scores = bases[1] == 1
                 runner_1b_to_3rd = False
 
                 if runner_3b_scores:
@@ -311,8 +359,10 @@ class BaseballSimulator:
                 if runner_2b_scores:
                     runs_this_pa += 1
                 if bases[0] == 1:
-                    if random.random() < self.league_avg_rates["rate_score_from_1st_on_double"]:
-                        runner_1b_scores = True
+                    if (
+                        random.random()
+                        < self.league_avg_rates["rate_score_from_1st_on_double"]
+                    ):
                         runs_this_pa += 1
                     else:
                         runner_1b_to_3rd = True
@@ -335,16 +385,18 @@ class BaseballSimulator:
             elif outcome_label == "Out_In_Play":
                 outs += 1
                 # Check GIDP opportunity (runner on 1st, less than 2 outs *before* this PA)
-                is_gidp_opportunity = (bases[0] == 1 and outs_before_pa < 2)
+                is_gidp_opportunity = bases[0] == 1 and outs_before_pa < 2
                 # Use adjusted rate directly, as bb_type isn't predicted
-                adjusted_gidp_rate = self.league_avg_rates.get("gidp_effective_rate", 0.065)  # Use pre-calculated effective rate
+                adjusted_gidp_rate = self.league_avg_rates.get(
+                    "gidp_effective_rate", 0.065
+                )  # Use pre-calculated effective rate
 
                 if is_gidp_opportunity and random.random() < adjusted_gidp_rate:
                     if outs < 3:  # Ensure DP doesn't add 4th out
                         outs += 1  # It's a double play
                     # Simplified GIDP: batter out, runner forced at 2nd is out, others hold/advance if forced by other runners
-                    runner_3b_holds = (bases[2] == 1)
-                    runner_2b_to_3rd = (bases[1] == 1)
+                    runner_3b_holds = bases[2] == 1
+                    runner_2b_to_3rd = bases[1] == 1
                     new_bases = [0, 0, 0]  # Batter out, runner from 1st out at 2nd
                     if runner_2b_to_3rd:
                         new_bases[2] = 1  # Runner from 2nd takes 3rd
@@ -353,9 +405,9 @@ class BaseballSimulator:
 
                 else:  # Not a GIDP
                     # Batter is out, advance runners if forced (simplified: 1 base)
-                    runner_3b_holds = (bases[2] == 1)
-                    runner_2b_to_3rd = (bases[1] == 1)
-                    runner_1b_to_2nd = (bases[0] == 1)
+                    runner_3b_holds = bases[2] == 1
+                    runner_2b_to_3rd = bases[1] == 1
+                    runner_1b_to_2nd = bases[0] == 1
                     new_bases = [0, 0, 0]  # Batter out
                     if runner_1b_to_2nd:
                         new_bases[1] = 1
@@ -386,15 +438,15 @@ class BaseballSimulator:
     ) -> Dict[str, Dict[str, Dict[str, int]]]:
         """
         Simulates the first 3 innings of a game.
-        
+
         Args:
             home_lineup: List of dictionaries with home team batter stats
             away_lineup: List of dictionaries with away team batter stats
             home_pitcher_inputs: Dictionary with home pitcher stats
             away_pitcher_inputs: Dictionary with away pitcher stats
-            game_context: Dict with park_factor_input, home_team_defense_rating, 
+            game_context: Dict with park_factor_input, home_team_defense_rating,
                           away_team_defense_rating
-        
+
         Returns:
             Dict: Results containing hits, runs, walks per team per inning.
                  Example: {'inning_1': {'away': {'H':1,'R':0,'BB':0}, 'home': {'H':0,'R':0,'BB':1}}, ...}
@@ -408,17 +460,29 @@ class BaseballSimulator:
             inning_results = {"away": {}, "home": {}}
 
             # --- Top of Inning ---
-            away_hits, away_runs, away_walks, away_batter_idx_next = self.simulate_single_inning(
-                inning, True, away_lineup, away_batter_idx, home_pitcher_inputs,
-                game_context,
+            away_hits, away_runs, away_walks, away_batter_idx_next = (
+                self.simulate_single_inning(
+                    inning,
+                    True,
+                    away_lineup,
+                    away_batter_idx,
+                    home_pitcher_inputs,
+                    game_context,
+                )
             )
             inning_results["away"] = {"H": away_hits, "R": away_runs, "BB": away_walks}
             away_batter_idx = away_batter_idx_next  # Update for next away inning
 
             # --- Bottom of Inning ---
-            home_hits, home_runs, home_walks, home_batter_idx_next = self.simulate_single_inning(
-                inning, False, home_lineup, home_batter_idx, away_pitcher_inputs,
-                game_context,
+            home_hits, home_runs, home_walks, home_batter_idx_next = (
+                self.simulate_single_inning(
+                    inning,
+                    False,
+                    home_lineup,
+                    home_batter_idx,
+                    away_pitcher_inputs,
+                    game_context,
+                )
             )
             inning_results["home"] = {"H": home_hits, "R": home_runs, "BB": home_walks}
             home_batter_idx = home_batter_idx_next  # Update for next home inning
@@ -438,7 +502,7 @@ class BaseballSimulator:
     ) -> List[Dict[str, Dict[str, Dict[str, int]]]]:
         """
         Run multiple simulations of the first three innings.
-        
+
         Args:
             home_lineup: List of dictionaries with home team batter stats
             away_lineup: List of dictionaries with away team batter stats
@@ -446,7 +510,7 @@ class BaseballSimulator:
             away_pitcher_inputs: Dictionary with away pitcher stats
             game_context: Dict with park_factor_input and team defense ratings
             num_sims: Number of simulations to run
-            
+
         Returns:
             List of simulation results
 
@@ -455,7 +519,10 @@ class BaseballSimulator:
         logging.info(f"Running {num_sims} game simulations...")
         for i in tqdm(range(num_sims)):
             sim_result = self.simulate_first_three_innings(
-                home_lineup, away_lineup, home_pitcher_inputs, away_pitcher_inputs,
+                home_lineup,
+                away_lineup,
+                home_pitcher_inputs,
+                away_pitcher_inputs,
                 game_context,
             )
             all_results.append(sim_result)
@@ -465,10 +532,10 @@ class BaseballSimulator:
     def analyze_simulation_results(self, all_results: List[Dict]) -> Dict[str, Dict]:
         """
         Analyze simulation results to calculate probabilities.
-        
+
         Args:
             all_results: List of simulation results from run_multiple_simulations
-            
+
         Returns:
             Dictionary with probability distributions for different outcomes
             Structure: {inning_str: {"away": {"H": {bin: prob}, "R": {...}}, "home": {...}}}
@@ -487,7 +554,9 @@ class BaseballSimulator:
             for team in ["away", "home"]:
                 # Count occurrences for different stats
                 for stat in ["H", "R", "BB", "HR"]:
-                    if stat == "HR":  # Special case for HR which might not be tracked directly
+                    if (
+                        stat == "HR"
+                    ):  # Special case for HR which might not be tracked directly
                         continue
 
                     counts = {}
@@ -505,7 +574,9 @@ class BaseballSimulator:
 
                     # Calculate probabilities
                     total = sum(counts.values())
-                    prob_bins = {bin_key: count / total for bin_key, count in counts.items()}
+                    prob_bins = {
+                        bin_key: count / total for bin_key, count in counts.items()
+                    }
 
                     # Make sure all bins from 0 to 4 and 5+ exist, even if probability is 0
                     for bin_key in ["0", "1", "2", "3", "4", "5+"]:
@@ -521,10 +592,10 @@ class BaseballSimulator:
     def convert_probabilities_to_dataframe(self, prob_dict: Dict) -> pd.DataFrame:
         """
         Convert the probability dictionary to a pandas DataFrame for easier analysis.
-        
+
         Args:
             prob_dict: Dictionary from analyze_simulation_results
-            
+
         Returns:
             pandas.DataFrame with columns: inning, team, stat, number, probability
 
@@ -534,21 +605,27 @@ class BaseballSimulator:
         for inn_str, teams_data in prob_dict.items():
             # Extract inning number from the key
             try:
-                inning_num = int(inn_str.split("_")[1]) if "_" in inn_str else int(inn_str)
+                inning_num = (
+                    int(inn_str.split("_")[1]) if "_" in inn_str else int(inn_str)
+                )
             except (IndexError, ValueError):
-                logging.warning(f"Warning: Could not parse inning number from key '{inn_str}'. Using as-is.")
+                logging.warning(
+                    f"Warning: Could not parse inning number from key '{inn_str}'. Using as-is."
+                )
                 inning_num = inn_str
 
             for team, stats_data in teams_data.items():
                 for stat, bins_data in stats_data.items():
                     for number_bin, probability in bins_data.items():
-                        data_for_df.append({
-                            "inning": inning_num,
-                            "team": team,
-                            "stat": stat,
-                            "number": number_bin,  # Keep as string ('0', '1', ..., '5+')
-                            "probability": probability,
-                        })
+                        data_for_df.append(
+                            {
+                                "inning": inning_num,
+                                "team": team,
+                                "stat": stat,
+                                "number": number_bin,  # Keep as string ('0', '1', ..., '5+')
+                                "probability": probability,
+                            }
+                        )
 
         # Create DataFrame
         if data_for_df:
@@ -556,10 +633,12 @@ class BaseballSimulator:
         # Return empty DataFrame with correct columns if no data
         return pd.DataFrame(columns=["inning", "team", "stat", "number", "probability"])
 
-    def visualize_results(self, prob_dict: Dict, output_file: Optional[str] = None) -> None:
+    def visualize_results(
+        self, prob_dict: Dict, output_file: Optional[str] = None
+    ) -> None:
         """
         Create visualizations of simulation results.
-        
+
         Args:
             prob_dict: Dictionary from analyze_simulation_results
             output_file: Optional path to save the visualization (if None, will display)
@@ -594,7 +673,9 @@ class BaseballSimulator:
                     if not plot_data.empty:
                         # Pivot for heatmap format
                         pivot_data = plot_data.pivot(
-                            index="inning", columns="number", values="probability",
+                            index="inning",
+                            columns="number",
+                            values="probability",
                         ).fillna(0)
 
                         # Plot
