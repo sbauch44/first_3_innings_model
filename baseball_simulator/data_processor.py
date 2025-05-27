@@ -841,6 +841,318 @@ def process_fangraphs_batter_projections(raw_df: pl.DataFrame) -> pl.DataFrame:
     return final_df
 
 
+def format_pitcher_projections(
+    df: pl.DataFrame,
+    league_avg_rates: dict = config.LEAGUE_AVG_RATES,
+) -> pl.DataFrame:
+    """
+    Format FanGraphs pitcher projections into simulation-ready format.
+
+    Converts counting stats to rates by dividing by TBF and handles missing 2B/3B
+    by imputing from league averages and total hits.
+
+    Args:
+        df: Raw FanGraphs pitcher projections DataFrame
+        league_avg_rates: Dictionary with league average rates for imputation
+
+    Returns:
+        Formatted DataFrame with simulation-ready column names and rates
+    """
+
+    formatted_df = (
+        df.with_columns(
+            [
+                # Direct rate calculations for available stats
+                (pl.col("HR") / pl.col("TBF")).alias("pitcher_hr_pct_a_daily_input"),
+                (pl.col("SO") / pl.col("TBF")).alias("pitcher_k_pct_a_daily_input"),
+                (pl.col("BB") / pl.col("TBF")).alias("pitcher_bb_pct_a_daily_input"),
+                (pl.col("HBP") / pl.col("TBF")).alias("pitcher_hbp_pct_a_daily_input"),
+                # Calculate total hit rate
+                (pl.col("H") / pl.col("TBF")).alias("total_hit_rate"),
+            ]
+        )
+        .with_columns(
+            [
+                # Method 1: Impute 2B and 3B from league averages
+                # This is the safer approach for missing data
+                pl.lit(league_avg_rates["lg_2b_pct"]).alias(
+                    "pitcher_2b_pct_a_daily_input"
+                ),
+                pl.lit(league_avg_rates["lg_3b_pct"]).alias(
+                    "pitcher_3b_pct_a_daily_input"
+                ),
+            ]
+        )
+        .with_columns(
+            [
+                # Calculate 1B rate as: Total Hits - HR - 2B - 3B (all divided by TBF)
+                (
+                    pl.col("total_hit_rate")
+                    - pl.col("pitcher_hr_pct_a_daily_input")
+                    - pl.col("pitcher_2b_pct_a_daily_input")
+                    - pl.col("pitcher_3b_pct_a_daily_input")
+                ).alias("pitcher_1b_pct_a_daily_input")
+            ]
+        )
+        .with_columns(
+            [
+                # Calculate non-strikeout out rate as remainder
+                (
+                    1.0
+                    - (
+                        pl.col("pitcher_1b_pct_a_daily_input")
+                        + pl.col("pitcher_2b_pct_a_daily_input")
+                        + pl.col("pitcher_3b_pct_a_daily_input")
+                        + pl.col("pitcher_hr_pct_a_daily_input")
+                        + pl.col("pitcher_k_pct_a_daily_input")
+                        + pl.col("pitcher_bb_pct_a_daily_input")
+                        + pl.col("pitcher_hbp_pct_a_daily_input")
+                    )
+                ).alias("pitcher_non_k_out_pct_a_daily_input")
+            ]
+        )
+        .with_columns(
+            [
+                # Add throwing hand (need to get this from another source or default)
+                pl.col("Throws").fill_null("R").alias("p_throws")
+                if "Throws" in df.columns
+                else pl.lit("R").alias("p_throws"),  # Default to right-handed
+            ]
+        )
+        .select(
+            [
+                # Keep original identifier columns
+                "xMLBAMID",
+                "PlayerName",
+                "Team",
+                # Simulation input columns
+                "pitcher_1b_pct_a_daily_input",
+                "pitcher_2b_pct_a_daily_input",
+                "pitcher_3b_pct_a_daily_input",
+                "pitcher_hr_pct_a_daily_input",
+                "pitcher_k_pct_a_daily_input",
+                "pitcher_bb_pct_a_daily_input",
+                "pitcher_hbp_pct_a_daily_input",
+                "pitcher_non_k_out_pct_a_daily_input",
+                "p_throws",
+                # Optional: Keep original stats for debugging/validation
+                "TBF",
+                "IP",
+                "H",
+                "HR",
+                "SO",
+                "BB",
+                "HBP",
+                "ERA",
+                "WHIP",
+            ]
+        )
+    )
+
+    return formatted_df
+
+
+def format_pitcher_projections_advanced_imputation(
+    df: pl.DataFrame, league_avg_rates: dict = config.LEAGUE_AVG_RATES
+) -> pl.DataFrame:
+    """
+    Alternative method using more sophisticated 2B/3B imputation based on pitcher type.
+
+    This method attempts to estimate 2B/3B rates based on the pitcher's profile:
+    - High K pitchers tend to allow fewer 2B/3B when contact is made
+    - High HR pitchers might allow more extra-base hits
+    """
+
+    if league_avg_rates is None:
+        league_avg_rates = {
+            "lg_2b_rate_of_hits": 0.179,  # 17.9% of hits are doubles
+            "lg_3b_rate_of_hits": 0.015,  # 1.5% of hits are triples
+            "lg_k_pct": 0.229,  # League average K rate
+        }
+
+    formatted_df = (
+        df.with_columns(
+            [
+                # Direct rate calculations
+                (pl.col("HR") / pl.col("TBF")).alias("pitcher_hr_pct_a_daily_input"),
+                (pl.col("SO") / pl.col("TBF")).alias("pitcher_k_pct_a_daily_input"),
+                (pl.col("BB") / pl.col("TBF")).alias("pitcher_bb_pct_a_daily_input"),
+                (pl.col("HBP") / pl.col("TBF")).alias("pitcher_hbp_pct_a_daily_input"),
+                (pl.col("H") / pl.col("TBF")).alias("total_hit_rate"),
+            ]
+        )
+        .with_columns(
+            [
+                # Calculate pitcher's K rate relative to league average
+                (
+                    pl.col("pitcher_k_pct_a_daily_input") / league_avg_rates["lg_k_pct"]
+                ).alias("k_rate_multiplier"),
+            ]
+        )
+        .with_columns(
+            [
+                # Adjust 2B/3B rates based on pitcher profile
+                # High-K pitchers allow fewer extra-base hits proportionally
+                (
+                    pl.col("total_hit_rate")
+                    * league_avg_rates["lg_2b_rate_of_hits"]
+                    * (
+                        2.0 - pl.col("k_rate_multiplier").clip(0.5, 1.5)
+                    )  # Inverse relationship with K rate
+                ).alias("pitcher_2b_pct_a_daily_input"),
+                (
+                    pl.col("total_hit_rate")
+                    * league_avg_rates["lg_3b_rate_of_hits"]
+                    * (2.0 - pl.col("k_rate_multiplier").clip(0.5, 1.5))
+                ).alias("pitcher_3b_pct_a_daily_input"),
+            ]
+        )
+        .with_columns(
+            [
+                # Calculate 1B rate as remainder of hits
+                (
+                    pl.col("total_hit_rate")
+                    - pl.col("pitcher_hr_pct_a_daily_input")
+                    - pl.col("pitcher_2b_pct_a_daily_input")
+                    - pl.col("pitcher_3b_pct_a_daily_input")
+                ).alias("pitcher_1b_pct_a_daily_input")
+            ]
+        )
+        .with_columns(
+            [
+                # Calculate non-strikeout out rate as remainder
+                (
+                    1.0
+                    - (
+                        pl.col("pitcher_1b_pct_a_daily_input")
+                        + pl.col("pitcher_2b_pct_a_daily_input")
+                        + pl.col("pitcher_3b_pct_a_daily_input")
+                        + pl.col("pitcher_hr_pct_a_daily_input")
+                        + pl.col("pitcher_k_pct_a_daily_input")
+                        + pl.col("pitcher_bb_pct_a_daily_input")
+                        + pl.col("pitcher_hbp_pct_a_daily_input")
+                    )
+                ).alias("pitcher_non_k_out_pct_a_daily_input")
+            ]
+        )
+        .with_columns(
+            [
+                # Add throwing hand
+                pl.col("Throws").fill_null("R").alias("p_throws")
+                if "Throws" in df.columns
+                else pl.lit("R").alias("p_throws"),
+            ]
+        )
+        .select(
+            [
+                # Keep identifier columns
+                "xMLBAMID",
+                "PlayerName",
+                "Team",
+                # Simulation input columns
+                "pitcher_1b_pct_a_daily_input",
+                "pitcher_2b_pct_a_daily_input",
+                "pitcher_3b_pct_a_daily_input",
+                "pitcher_hr_pct_a_daily_input",
+                "pitcher_k_pct_a_daily_input",
+                "pitcher_bb_pct_a_daily_input",
+                "pitcher_hbp_pct_a_daily_input",
+                "pitcher_non_k_out_pct_a_daily_input",
+                "p_throws",
+                # Optional: Keep original stats
+                "TBF",
+                "IP",
+                "H",
+                "HR",
+                "SO",
+                "BB",
+                "HBP",
+                "ERA",
+                "WHIP",
+            ]
+        )
+    )
+
+    return formatted_df
+
+
+def validate_pitcher_rates(df: pl.DataFrame) -> pl.DataFrame:
+    """
+    Validate that pitcher rates sum to approximately 1.0 and log any issues.
+    """
+
+    validation_df = df.with_columns(
+        [
+            # Calculate sum of all rates
+            (
+                pl.col("pitcher_1b_pct_a_daily_input")
+                + pl.col("pitcher_2b_pct_a_daily_input")
+                + pl.col("pitcher_3b_pct_a_daily_input")
+                + pl.col("pitcher_hr_pct_a_daily_input")
+                + pl.col("pitcher_k_pct_a_daily_input")
+                + pl.col("pitcher_bb_pct_a_daily_input")
+                + pl.col("pitcher_hbp_pct_a_daily_input")
+                + pl.col("pitcher_non_k_out_pct_a_daily_input")
+            ).alias("total_rate_sum"),
+            # Flag problematic rate sums
+            (
+                pl.when(
+                    (pl.col("total_rate_sum") < 0.99)
+                    | (pl.col("total_rate_sum") > 1.01)
+                )
+                .then(pl.lit(True))
+                .otherwise(pl.lit(False))
+            ).alias("rate_sum_warning"),
+        ]
+    )
+
+    # Log warnings
+    warning_players = validation_df.filter(pl.col("rate_sum_warning"))
+    if not warning_players.is_empty():
+        logging.warning(
+            f"Found {warning_players.height} pitchers with rate sums != 1.0:"
+        )
+        for row in warning_players.select(["PlayerName", "total_rate_sum"]).to_dicts():
+            logging.warning(f"  {row['PlayerName']}: {row['total_rate_sum']:.4f}")
+
+    return validation_df
+
+
+def process_fangraphs_pitcher_projections(
+    raw_df: pl.DataFrame, use_advanced_imputation: bool = True
+) -> pl.DataFrame:
+    """
+    Complete processing pipeline for FanGraphs pitcher projections.
+
+    Args:
+        raw_df: Raw FanGraphs pitcher projections
+        use_advanced_imputation: Whether to use advanced 2B/3B imputation method
+
+    Returns:
+        Simulation-ready pitcher projections
+    """
+
+    logging.info(f"Processing {raw_df.height} pitcher projections...")
+
+    # Choose imputation method
+    if use_advanced_imputation:
+        formatted_df = format_pitcher_projections_advanced_imputation(raw_df)
+        logging.info("Using advanced 2B/3B imputation based on pitcher profile")
+    else:
+        formatted_df = format_pitcher_projections(raw_df)
+        logging.info("Using simple league average 2B/3B imputation")
+
+    # Validate results
+    validated_df = validate_pitcher_rates(formatted_df)
+
+    # Clean up for final output
+    final_df = validated_df.drop(["total_rate_sum", "rate_sum_warning"])
+
+    logging.info(f"Successfully processed {final_df.height} pitcher projections")
+
+    return final_df
+
+
 # DEFENSIVE STATS FUNCTIONS
 def calculate_defensive_innings_played(df: pl.DataFrame) -> pl.DataFrame:
     """
