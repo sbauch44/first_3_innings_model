@@ -1,6 +1,7 @@
 import json
 import re
 
+import config
 import polars as pl
 import requests
 import statsapi
@@ -8,8 +9,6 @@ from pybaseball import (
     statcast,
     statcast_fielding,
 )
-
-from baseball_simulator import config
 
 
 def fetch_statcast_data():

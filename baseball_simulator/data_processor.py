@@ -722,15 +722,15 @@ def format_batter_projections(df: pl.DataFrame) -> pl.DataFrame:
                 ).alias("batter_non_k_out_pct_daily_input")
             ]
         )
-        .with_columns(
-            [
-                # Add batting stance (assuming it exists in original data)
-                # If not present, you'll need to add this from another source
-                pl.col("stand")
-                .fill_null("R")
-                .alias("stand"),  # Default to right-handed if missing
-            ]
-        )
+        # .with_columns(
+        #     [
+        #         # Add batting stance (assuming it exists in original data)
+        #         # If not present, you'll need to add this from another source
+        #         pl.col("stand")
+        #         .fill_null("R")
+        #         .alias("stand"),  # Default to right-handed if missing
+        #     ]
+        # )
         .select(
             [
                 # Keep original identifier columns
@@ -746,7 +746,7 @@ def format_batter_projections(df: pl.DataFrame) -> pl.DataFrame:
                 "batter_bb_pct_daily_input",
                 "batter_hbp_pct_daily_input",
                 "batter_non_k_out_pct_daily_input",
-                "stand",
+                # "stand",
                 # Optional: Keep original stats for debugging/validation
                 "PA",
                 "AB",
@@ -789,17 +789,18 @@ def validate_batter_rates(df: pl.DataFrame) -> pl.DataFrame:
                 + pl.col("batter_bb_pct_daily_input")
                 + pl.col("batter_hbp_pct_daily_input")
                 + pl.col("batter_non_k_out_pct_daily_input")
-            ).alias("total_rate_sum"),
-            # Flag players with rate sums significantly different from 1.0
-            (
-                pl.when(
-                    (pl.col("total_rate_sum") < 0.99)
-                    | (pl.col("total_rate_sum") > 1.01)
-                )
-                .then(pl.lit(True))
-                .otherwise(pl.lit(False))
-            ).alias("rate_sum_warning"),
+            ).alias(
+                "total_rate_sum"
+            ),  # Flag players with rate sums significantly different from 1.0
         ]
+    ).with_columns(
+        (
+            pl.when(
+                (pl.col("total_rate_sum") < 0.99) | (pl.col("total_rate_sum") > 1.01)
+            )
+            .then(pl.lit(True))
+            .otherwise(pl.lit(False))
+        ).alias("rate_sum_warning"),
     )
 
     # Log warnings for players with problematic rate sums
@@ -963,13 +964,6 @@ def format_pitcher_projections_advanced_imputation(
     - High HR pitchers might allow more extra-base hits
     """
 
-    if league_avg_rates is None:
-        league_avg_rates = {
-            "lg_2b_rate_of_hits": 0.179,  # 17.9% of hits are doubles
-            "lg_3b_rate_of_hits": 0.015,  # 1.5% of hits are triples
-            "lg_k_pct": 0.229,  # League average K rate
-        }
-
     formatted_df = (
         df.with_columns(
             [
@@ -1095,15 +1089,15 @@ def validate_pitcher_rates(df: pl.DataFrame) -> pl.DataFrame:
                 + pl.col("pitcher_non_k_out_pct_a_daily_input")
             ).alias("total_rate_sum"),
             # Flag problematic rate sums
-            (
-                pl.when(
-                    (pl.col("total_rate_sum") < 0.99)
-                    | (pl.col("total_rate_sum") > 1.01)
-                )
-                .then(pl.lit(True))
-                .otherwise(pl.lit(False))
-            ).alias("rate_sum_warning"),
         ]
+    ).with_columns(
+        (
+            pl.when(
+                (pl.col("total_rate_sum") < 0.99) | (pl.col("total_rate_sum") > 1.01)
+            )
+            .then(pl.lit(True))
+            .otherwise(pl.lit(False))
+        ).alias("rate_sum_warning"),
     )
 
     # Log warnings
