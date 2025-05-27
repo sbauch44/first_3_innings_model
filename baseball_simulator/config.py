@@ -1,10 +1,9 @@
-
 import polars as pl
 
 NUM_SIMULATIONS = 10_000
 
 # --- File Paths & Names ---
-BASE_FILE_PATH = "../clean_data/" # Or use environment variables
+BASE_FILE_PATH = "../clean_data/"  # Or use environment variables
 
 RAW_STATCAST_FILES = [
     "2021_statcast_data.parquet",
@@ -21,41 +20,85 @@ RAW_DEFENSE_FILE = "statcast_defensive_stats.parquet"
 CLEAN_DEFENSE_FILE = "clean_defensive_stats.parquet"
 RAW_PARKFACTOR_FILE = "statcast_park_factors.parquet"
 CLEAN_PARKFACTOR_FILE = "clean_park_factors.parquet"
-MODEL_PATH = "." # Added example
-SCALER_PATH = "." # Added example
+MODEL_PATH = "."  # Added example
+SCALER_PATH = "."  # Added example
 
 # --- Data Selection ---
 RAW_COLS_TO_KEEP = [
-    "game_pk", "at_bat_number", "pitch_number", "batter", "pitcher",
-    "events", "stand", "p_throws", "inning_topbot", "home_team", "away_team",
-    "game_date", "game_type", "bb_type", "balls", "strikes", "outs_when_up",
-    "inning", "game_year", "fielder_2", "fielder_3", "fielder_4", "fielder_5",
-    "fielder_6", "fielder_7", "fielder_8", "fielder_9",
+    "game_pk",
+    "at_bat_number",
+    "pitch_number",
+    "batter",
+    "pitcher",
+    "events",
+    "stand",
+    "p_throws",
+    "inning_topbot",
+    "home_team",
+    "away_team",
+    "game_date",
+    "game_type",
+    "bb_type",
+    "balls",
+    "strikes",
+    "outs_when_up",
+    "inning",
+    "game_year",
+    "fielder_2",
+    "fielder_3",
+    "fielder_4",
+    "fielder_5",
+    "fielder_6",
+    "fielder_7",
+    "fielder_8",
+    "fielder_9",
 ]
 
 # --- Feature Engineering & Model ---
 OUTCOME_COL_NAME = "pa_outcome_category"
 START_YEAR = 2021
-END_YEAR = 2025 # Or dynamically set
+END_YEAR = 2025  # Or dynamically set
 MODEL_TRAIN_YEARS = [2023, 2024]
 LEAGUE_AVG_YEARS = [2021, 2022]
 
 # Event Definitions (for helper columns and outcome mapping)
 HIT_EVENTS = ["single", "double", "triple", "home_run"]
-AB_EVENTS = [ # Events counting as an At Bat - REVIEW CAREFULLY!
-    "single", "double", "triple", "home_run", "strikeout", "strikeout_double_play",
-    "field_out", "force_out", "grounded_into_double_play", "double_play", "triple_play",
-    "field_error", "fielders_choice", "fielders_choice_out",
+AB_EVENTS = [  # Events counting as an At Bat - REVIEW CAREFULLY!
+    "single",
+    "double",
+    "triple",
+    "home_run",
+    "strikeout",
+    "strikeout_double_play",
+    "field_out",
+    "force_out",
+    "grounded_into_double_play",
+    "double_play",
+    "triple_play",
+    "field_error",
+    "fielders_choice",
+    "fielders_choice_out",
     # Excludes: 'walk', 'hit_by_pitch', 'sac_fly', 'sac_bunt', 'catcher_interf', 'intent_walk' ...
 ]
 K_EVENTS = ["strikeout", "strikeout_double_play"]
-BB_EVENTS = ["walk", "catcher_interf"] # Include catcher interference? Check rules. Often rare.
+BB_EVENTS = [
+    "walk",
+    "catcher_interf",
+]  # Include catcher interference? Check rules. Often rare.
 HBP_EVENTS = ["hit_by_pitch"]
-OUT_IN_PLAY_EVENTS = [ # Used for outcome category 0
-    "field_out", "force_out", "grounded_into_double_play",
-    "double_play", "triple_play", "sac_fly", "sac_bunt",
-    "sac_fly_double_play", "sac_bunt_double_play",
-    "field_error", "fielders_choice_out", "fielders_choice",
+OUT_IN_PLAY_EVENTS = [  # Used for outcome category 0
+    "field_out",
+    "force_out",
+    "grounded_into_double_play",
+    "double_play",
+    "triple_play",
+    "sac_fly",
+    "sac_bunt",
+    "sac_fly_double_play",
+    "sac_bunt_double_play",
+    "field_error",
+    "fielders_choice_out",
+    "fielders_choice",
 ]
 
 # League Average Rates (for model input)
@@ -69,33 +112,63 @@ LEAGUE_AVG_RATES = {
     "lg_3b_pct": 0.0035882083115064234,
     "lg_hr_pct": 0.030792907181573653,
     "lg_out_pct": 0.6889821376710302,
-    "gidp_rate_if_gb_opportunity": 0.13, # estimate from Gemini
-    "rate_1st_to_3rd_on_single": 0.28, # estimate from Gemini
-    "rate_score_from_1st_on_double": 0.45, # estimate from Gemini
+    "gidp_rate_if_gb_opportunity": 0.13,  # estimate from Gemini
+    "rate_1st_to_3rd_on_single": 0.28,  # estimate from Gemini
+    "rate_score_from_1st_on_double": 0.45,  # estimate from Gemini
+    "lg_2b_rate_of_hits": 0.179,  # ~17.9% of hits are doubles
+    "lg_3b_rate_of_hits": 0.015,  # ~1.5% of hits are triples
 }
 
 # Ballast Weights (Stabilization Points)
 BALLAST_WEIGHTS = {
     "batter": {
         # Outcome: Corresponding Rate & Stabilization Point
-        "is_hit": {"rate": "AVG", "value": 910, "unit": "AB"}, # Overall Hit Rate = AVG
-        "is_k": {"rate": "K%", "value": 60, "unit": "PA"}, # Strikeout Rate
-        "is_bb": {"rate": "BB%", "value": 120, "unit": "PA"}, # Walk Rate
-        "is_hbp": {"rate": "HBP%", "value": 240, "unit": "PA"}, # Hit By Pitch Rate
-        "is_1b": {"rate": "1B%", "value": 290, "unit": "PA"}, # Single Rate
-        "is_2b": {"rate": "2B%", "value": 1600, "unit": "PA"}, # No specific stabilization point found for 2B Rate alone
-        "is_3b": {"rate": "3B%", "value": 1600, "unit": "PA"}, # No specific stabilization point found for 3B Rate alone
-        "is_hr": {"rate": "HR%", "value": 170, "unit": "PA"}, # Home Run Rate
+        "is_hit": {"rate": "AVG", "value": 910, "unit": "AB"},  # Overall Hit Rate = AVG
+        "is_k": {"rate": "K%", "value": 60, "unit": "PA"},  # Strikeout Rate
+        "is_bb": {"rate": "BB%", "value": 120, "unit": "PA"},  # Walk Rate
+        "is_hbp": {"rate": "HBP%", "value": 240, "unit": "PA"},  # Hit By Pitch Rate
+        "is_1b": {"rate": "1B%", "value": 290, "unit": "PA"},  # Single Rate
+        "is_2b": {
+            "rate": "2B%",
+            "value": 1600,
+            "unit": "PA",
+        },  # No specific stabilization point found for 2B Rate alone
+        "is_3b": {
+            "rate": "3B%",
+            "value": 1600,
+            "unit": "PA",
+        },  # No specific stabilization point found for 3B Rate alone
+        "is_hr": {"rate": "HR%", "value": 170, "unit": "PA"},  # Home Run Rate
     },
     "pitcher": {
-        "is_hit": {"rate": "AVG_A", "value": 630, "unit": "BF"}, # Overall Hit Rate Allowed = AVG Against (using BF)
-        "is_k": {"rate": "K%_A", "value": 70, "unit": "BF"}, # Strikeout Rate Against
-        "is_bb": {"rate": "BB%_A", "value": 170, "unit": "BF"}, # Walk Rate Against
-        "is_hbp": {"rate": "HBP%_A", "value": 640, "unit": "BF"}, # Hit By Pitch Rate Against
-        "is_1b": {"rate": "1B%_A", "value": 670, "unit": "BF"}, # Single Rate Against
-        "is_2b": {"rate": "2B%_A", "value": 1450, "unit": "BF"}, # No specific stabilization point found
-        "is_3b": {"rate": "3B%_A", "value": 1450, "unit": "BF"}, # No specific stabilization point found
-        "is_hr": {"rate": "HR%_A", "value": 1320, "unit": "BF"}, # Home Run Rate Against (Note: high stabilization)
+        "is_hit": {
+            "rate": "AVG_A",
+            "value": 630,
+            "unit": "BF",
+        },  # Overall Hit Rate Allowed = AVG Against (using BF)
+        "is_k": {"rate": "K%_A", "value": 70, "unit": "BF"},  # Strikeout Rate Against
+        "is_bb": {"rate": "BB%_A", "value": 170, "unit": "BF"},  # Walk Rate Against
+        "is_hbp": {
+            "rate": "HBP%_A",
+            "value": 640,
+            "unit": "BF",
+        },  # Hit By Pitch Rate Against
+        "is_1b": {"rate": "1B%_A", "value": 670, "unit": "BF"},  # Single Rate Against
+        "is_2b": {
+            "rate": "2B%_A",
+            "value": 1450,
+            "unit": "BF",
+        },  # No specific stabilization point found
+        "is_3b": {
+            "rate": "3B%_A",
+            "value": 1450,
+            "unit": "BF",
+        },  # No specific stabilization point found
+        "is_hr": {
+            "rate": "HR%_A",
+            "value": 1320,
+            "unit": "BF",
+        },  # Home Run Rate Against (Note: high stabilization)
     },
 }
 
@@ -158,9 +231,15 @@ CONTINUOUS_COLS = [
 CATEGORICAL_COLS = ["is_platoon_adv", "is_batter_home"]
 
 # Outcome Mapping
-OUTCOME_LABELS = { # Added example
-    0: "Out_In_Play", 1: "Single", 2: "Double", 3: "Triple", 4: "HomeRun",
-    5: "Strikeout", 6: "Walk", 7: "HBP",
+OUTCOME_LABELS = {  # Added example
+    0: "Out_In_Play",
+    1: "Single",
+    2: "Double",
+    3: "Triple",
+    4: "HomeRun",
+    5: "Strikeout",
+    6: "Walk",
+    7: "HBP",
 }
 N_CATEGORIES = len(OUTCOME_LABELS)
 
@@ -168,12 +247,12 @@ N_CATEGORIES = len(OUTCOME_LABELS)
 PITCHER_PREDICTOR_SUBSET = [
     "pitcher_k_pct_a_daily_input",
     "pitcher_bb_pct_a_daily_input",
-    "pitcher_hbp_pct_a_daily_input", # If you calculated and used this
-    "pitcher_1b_pct_a_daily_input", # If you calculated and used this
-    "pitcher_2b_pct_a_daily_input", # If you calculated and used this
-    "pitcher_3b_pct_a_daily_input", # If you calculated and used this
-    "pitcher_hr_pct_a_daily_input", # If you calculated and used this
-    "pitcher_non_k_out_pct_a_daily_input", # If you calculated and used this
+    "pitcher_hbp_pct_a_daily_input",  # If you calculated and used this
+    "pitcher_1b_pct_a_daily_input",  # If you calculated and used this
+    "pitcher_2b_pct_a_daily_input",  # If you calculated and used this
+    "pitcher_3b_pct_a_daily_input",  # If you calculated and used this
+    "pitcher_hr_pct_a_daily_input",  # If you calculated and used this
+    "pitcher_non_k_out_pct_a_daily_input",  # If you calculated and used this
     # Note: 'pitcher_avg_a_daily_input' was commented out in your notebook.
     # If you ended up including it in your final model training, add it here.
     # Add any other pitcher-specific rolling/ballasted rates that were part of your final X_np matrix.
@@ -184,12 +263,12 @@ PITCHER_PREDICTOR_SUBSET = [
 BATTER_PREDICTOR_SUBSET = [
     "batter_k_pct_daily_input",
     "batter_bb_pct_daily_input",
-    "batter_hbp_pct_daily_input",      # If you calculated and used this
-    "batter_1b_pct_daily_input",      # If you calculated and used this
-    "batter_2b_pct_daily_input",      # If you calculated and used this
-    "batter_3b_pct_daily_input",      # If you calculated and used this
-    "batter_hr_pct_daily_input",      # If you calculated and used this
-    "batter_non_k_out_pct_daily_input", # If you calculated and used this
+    "batter_hbp_pct_daily_input",  # If you calculated and used this
+    "batter_1b_pct_daily_input",  # If you calculated and used this
+    "batter_2b_pct_daily_input",  # If you calculated and used this
+    "batter_3b_pct_daily_input",  # If you calculated and used this
+    "batter_hr_pct_daily_input",  # If you calculated and used this
+    "batter_non_k_out_pct_daily_input",  # If you calculated and used this
     # Note: 'batter_avg_daily_input' was commented out in your notebook.
     # If you ended up including it in your final model training, add it here.
     # Add any other batter-specific rolling/ballasted rates that were part of your final X_np matrix.
@@ -229,11 +308,11 @@ team_mapping = {
     "CHC": "Cubs",
 }
 
-MAPPING_DF = (
-    pl.DataFrame({
+MAPPING_DF = pl.DataFrame(
+    {
         "team_name": list(team_mapping.values()),
         "team_abbr": list(team_mapping.keys()),
-    })
+    }
 )
 
 
