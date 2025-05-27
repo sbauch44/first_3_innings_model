@@ -1,11 +1,13 @@
-import streamlit as st
-import storage
 from datetime import date
+
+import streamlit as st
+
+import storage
 
 st.title("Baseball Inning Simulator Results")
 
 selected_date = st.date_input("Select Date", date.today())
-date_str = selected_date.strftime('%Y-%m-%d')
+date_str = selected_date.strftime("%Y-%m-%d")
 
 if st.button("Load Results"):
     st.write(f"Loading results for {date_str}...")

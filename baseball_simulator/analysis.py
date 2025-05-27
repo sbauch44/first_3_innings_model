@@ -1,7 +1,6 @@
-import polars as pl
 import collections
-import math
-import numpy as np # Used for isclose, infinity
+
+import polars as pl
 
 # --- Helper Functions for Odds Conversion ---
 
@@ -53,6 +52,7 @@ def calculate_probabilities_and_odds(all_results: list, num_simulations: int, ma
         polars.DataFrame: A DataFrame with columns: inning, team, stat, number_bin,
                           probability, decimal_odds, american_odds.
                           Returns None if num_simulations is zero or input is empty.
+
     """
     if not all_results or num_simulations <= 0:
         print("Warning: No simulation results provided or num_simulations is zero. Cannot calculate probabilities.")
@@ -64,25 +64,25 @@ def calculate_probabilities_and_odds(all_results: list, num_simulations: int, ma
     # --- Initialize dictionaries to store counts ---
     results_counts = {}
     for inn in [1, 2, 3]:
-        results_counts[f'inning_{inn}'] = {
-            'away': {'H': collections.defaultdict(int), 'BB': collections.defaultdict(int), 'HR': collections.defaultdict(int)},
-            'home': {'H': collections.defaultdict(int), 'BB': collections.defaultdict(int), 'HR': collections.defaultdict(int)}
+        results_counts[f"inning_{inn}"] = {
+            "away": {"H": collections.defaultdict(int), "BB": collections.defaultdict(int), "HR": collections.defaultdict(int)},
+            "home": {"H": collections.defaultdict(int), "BB": collections.defaultdict(int), "HR": collections.defaultdict(int)},
         }
 
     # --- Tally results into bins ---
     for sim_result in all_results:
         for inn in [1, 2, 3]:
-            inn_key = f'inning_{inn}'
+            inn_key = f"inning_{inn}"
             if inn_key not in sim_result: continue # Skip if inning missing
 
-            for team in ['away', 'home']:
+            for team in ["away", "home"]:
                 if team not in sim_result[inn_key]: continue # Skip if team missing
 
                 try:
                     team_result = sim_result[inn_key][team]
-                    h = team_result.get('H', 0) # Use .get() for safety
-                    bb = team_result.get('BB', 0)
-                    hr = team_result.get('HR', 0)
+                    h = team_result.get("H", 0) # Use .get() for safety
+                    bb = team_result.get("BB", 0)
+                    hr = team_result.get("HR", 0)
 
                     # Determine bin (0 to max_bin_val)
                     h_bin = min(h, max_bin_val)
@@ -90,9 +90,9 @@ def calculate_probabilities_and_odds(all_results: list, num_simulations: int, ma
                     hr_bin = min(hr, max_bin_val)
 
                     # Increment count for the corresponding bin
-                    results_counts[inn_key][team]['H'][h_bin] += 1
-                    results_counts[inn_key][team]['BB'][bb_bin] += 1
-                    results_counts[inn_key][team]['HR'][hr_bin] += 1
+                    results_counts[inn_key][team]["H"][h_bin] += 1
+                    results_counts[inn_key][team]["BB"][bb_bin] += 1
+                    results_counts[inn_key][team]["HR"][hr_bin] += 1
                 except TypeError:
                      # Handle cases where H/BB/HR might not be numbers if sim failed partially
                      print(f"Warning: Invalid data type found for {inn_key}/{team} in a sim result. Skipping entry.")
@@ -104,13 +104,13 @@ def calculate_probabilities_and_odds(all_results: list, num_simulations: int, ma
     # --- Calculate probabilities and odds, structure for DataFrame ---
     data_for_df = []
     for inn in [1, 2, 3]:
-        inn_key = f'inning_{inn}'
+        inn_key = f"inning_{inn}"
         if inn_key not in results_counts: continue
 
-        for team in ['away', 'home']:
+        for team in ["away", "home"]:
             if team not in results_counts[inn_key]: continue
 
-            for stat in ['H', 'BB', 'HR']:
+            for stat in ["H", "BB", "HR"]:
                 if stat not in results_counts[inn_key][team]: continue
 
                 stat_counts = results_counts[inn_key][team][stat]
@@ -133,7 +133,7 @@ def calculate_probabilities_and_odds(all_results: list, num_simulations: int, ma
                         "number_bin": number_bin_label,
                         "probability": probability,
                         "decimal_odds": decimal_odds,
-                        "american_odds": american_odds
+                        "american_odds": american_odds,
                     })
                     # Break after processing the max_bin_val bin (which represents X+)
                     if i == max_bin_val:
@@ -152,7 +152,7 @@ def calculate_probabilities_and_odds(all_results: list, num_simulations: int, ma
         "number_bin": pl.Utf8, # e.g., '0', '1', '5+'
         "probability": pl.Float64,
         "decimal_odds": pl.Float64, # Can be null
-        "american_odds": pl.Int64    # Can be null
+        "american_odds": pl.Int64,    # Can be null
     }
 
     df_probabilities = pl.DataFrame(data_for_df, schema=schema)

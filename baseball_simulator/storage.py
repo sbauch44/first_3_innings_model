@@ -1,12 +1,13 @@
 # storage.py
-import polars as pl
 import logging
-from pathlib import Path # Import Path from pathlib
+from pathlib import Path  # Import Path from pathlib
+
+import polars as pl
+
 import config  # Assuming config.py is in the same directory
 
-
 # Configure logging for this module
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(module)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(module)s - %(message)s")
 
 # --- Generic Load/Save ---
 def save_dataframe(df: pl.DataFrame, file_name_with_ext: str, sub_path: str = ""):
@@ -36,7 +37,7 @@ def load_dataframe(file_name_with_ext: str, sub_path: str = "") -> pl.DataFrame 
     except AttributeError as ae:
         logging.error(f"Configuration error (e.g., BASE_FILE_PATH not set in config): {ae}", exc_info=True)
         return None
-    
+
     logging.info(f"Attempting to load DataFrame from: {full_path_obj}")
     if not full_path_obj.exists() or not full_path_obj.is_file():
         logging.warning(f"File not found or is not a file at {full_path_obj}. Returning None.")
@@ -55,14 +56,14 @@ def save_historical_pa_data_with_helpers(df: pl.DataFrame):
     try:
         save_dataframe(df, config.HISTORICAL_PA_HELPERS_FILE)
     except AttributeError:
-        logging.error("HISTORICAL_PA_HELPERS_FILE not found in config.")
+        logging.exception("HISTORICAL_PA_HELPERS_FILE not found in config.")
 
 
 def load_historical_pa_data_with_helpers() -> pl.DataFrame | None:
     try:
         return load_dataframe(config.HISTORICAL_PA_HELPERS_FILE)
     except AttributeError:
-        logging.error("HISTORICAL_PA_HELPERS_FILE not found in config.")
+        logging.exception("HISTORICAL_PA_HELPERS_FILE not found in config.")
         return None
 
 
@@ -87,9 +88,9 @@ def load_simulation_results_for_date(date_str: str) -> pl.DataFrame | None:
     try:
         base_path_obj = Path(config.BASE_FILE_PATH)
     except AttributeError:
-        logging.error("BASE_FILE_PATH not found in config.")
+        logging.exception("BASE_FILE_PATH not found in config.")
         return None
-        
+
     results_path_obj = base_path_obj / "results" / date_str
     all_dfs = []
 
