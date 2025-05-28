@@ -139,10 +139,14 @@ def run_incremental_update_and_feature_recalc():
 
         logging.info("filtering dataframe to only include relevant columns...")
         batter_stats_to_join = data_processor.select_subset_of_cols(
-            df_batter_daily_final, "batter", batter_cols
+            df_batter_daily_final,
+            "batter",
+            batter_cols,
         )
         pitcher_stats_to_join = data_processor.select_subset_of_cols(
-            df_pitcher_daily_final, "pitcher", pitcher_cols
+            df_pitcher_daily_final,
+            "pitcher",
+            pitcher_cols,
         )
 
         logging.info("Joining daily stats back to the original dataframe...")
@@ -299,9 +303,7 @@ def run_incremental_update_and_feature_recalc():
 
 
 def run_daily_scheduling():
-    """
-    Fetches today's schedule and schedules the pre-game simulation triggers.
-    """
+    """Fetches today's schedule and schedules the pre-game simulation triggers."""
     logging.info("\n--- Starting Daily Scheduling ---")
     today = date.today()
     today_str = today.strftime("%Y-%m-%d")

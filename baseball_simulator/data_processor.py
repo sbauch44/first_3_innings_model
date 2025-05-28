@@ -2,6 +2,7 @@ import datetime
 import logging
 
 import config
+import data_fetcher
 import polars as pl
 
 logging.basicConfig(
@@ -1352,6 +1353,9 @@ def prepare_simulation_inputs(
         # or if defensive stats are also part of their general projection profile.
         all_player_ids_for_projections = list(set(all_batter_ids + all_pitcher_ids))
 
+        # Get handedness data for all players in the game
+        handedness_df = data_fetcher.get_game_handedness_data(lineup_data)
+
         # Fetch projections for these specific players for today
         # These fetcher functions should return DataFrames with player_id and the necessary stat columns
         # The column names in the returned DFs should match config.BATTER_PREDICTOR_SUBSET / PITCHER_PREDICTOR_SUBSET
@@ -1376,6 +1380,13 @@ def prepare_simulation_inputs(
         if bat_projections_df is None or pit_projections_df is None:
             logging.error("Failed to fetch necessary player projections.")
             return None
+
+        bat_projections_df = data_fetcher.add_handedness_to_projections(
+            bat_projections_df, handedness_df
+        )
+        pit_projections_df = data_fetcher.add_handedness_to_projections(
+            pit_projections_df, handedness_df
+        )
 
         # Convert to dictionaries for easier lookup: player_id -> {stat: value, ...}
         bat_projections_dict = {

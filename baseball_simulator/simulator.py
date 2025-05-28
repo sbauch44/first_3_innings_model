@@ -127,7 +127,7 @@ class BaseballSimulator:
             raise
 
         # 3. Combine Features
-        categorical_data = input_df[self.categorical_cols].values
+        categorical_data = input_df[self.categorical_cols].to_numpy()
         categorical_data = np.asarray(categorical_data)
         # Ensure both arrays are 2D and have compatible dtypes
         if categorical_data.ndim == 1:

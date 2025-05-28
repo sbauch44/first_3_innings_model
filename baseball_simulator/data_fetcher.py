@@ -1,4 +1,5 @@
 import json
+import logging
 import re
 
 import config
@@ -102,3 +103,254 @@ def get_game_info(game_pk):
     sched = statsapi.schedule()
     game_dict = next((game for game in sched if game["game_id"] == game_pk), None)
     return game_dict
+
+
+def fetch_player_handedness(player_ids: list[int]) -> pl.DataFrame:
+    """
+    Fetch batting and pitching handedness for multiple players using statsapi.
+
+    Args:
+        player_ids: List of MLB player IDs to fetch handedness for
+
+    Returns:
+        Polars DataFrame with columns: player_id, bat_side, pitch_hand
+        bat_side and pitch_hand will be 'L', 'R', or 'S' (switch)
+        Returns None for players not found
+    """
+
+    if not player_ids:
+        logging.warning("No player IDs provided to fetch_player_handedness")
+        return pl.DataFrame(
+            schema={
+                "player_id": pl.Int64,
+                "bat_side": pl.Utf8,
+                "pitch_hand": pl.Utf8,
+            }
+        )
+
+    # Convert to comma-separated string for API call
+    player_ids_str = ",".join(str(pid) for pid in player_ids)
+
+    try:
+        logging.info(f"Fetching handedness data for {len(player_ids)} players...")
+
+        # Make API call to get player info
+        response = statsapi.get("people", {"personIds": player_ids_str})
+
+        if not response or "people" not in response:
+            logging.error("Invalid response from statsapi people endpoint")
+            return pl.DataFrame(
+                schema={
+                    "player_id": pl.Int64,
+                    "bat_side": pl.Utf8,
+                    "pitch_hand": pl.Utf8,
+                }
+            )
+
+        people_data = response["people"]
+        logging.info(f"Received data for {len(people_data)} players")
+
+        # Extract handedness data
+        handedness_data = []
+
+        for player in people_data:
+            player_id = player.get("id")
+
+            # Extract batting side
+            bat_side_info = player.get("batSide", {})
+            bat_side = bat_side_info.get("code", "R") if bat_side_info else "R"
+
+            # Extract pitching hand
+            pitch_hand_info = player.get("pitchHand", {})
+            pitch_hand = pitch_hand_info.get("code", "R") if pitch_hand_info else "R"
+
+            handedness_data.append(
+                {
+                    "player_id": player_id,
+                    "bat_side": bat_side,
+                    "pitch_hand": pitch_hand,
+                }
+            )
+
+            logging.debug(f"Player {player_id}: bats {bat_side}, throws {pitch_hand}")
+
+        # Create DataFrame
+        df = pl.DataFrame(
+            handedness_data,
+            schema={
+                "player_id": pl.Int64,
+                "bat_side": pl.Utf8,
+                "pitch_hand": pl.Utf8,
+            },
+        )
+
+        # Check for missing players
+        found_ids = set(df["player_id"].to_list())
+        missing_ids = set(player_ids) - found_ids
+
+        if missing_ids:
+            logging.warning(f"No handedness data found for player IDs: {missing_ids}")
+
+            # Add missing players with default values
+            missing_data = []
+            for missing_id in missing_ids:
+                missing_data.append(
+                    {
+                        "player_id": missing_id,
+                        "bat_side": "R",  # Default to right-handed
+                        "pitch_hand": "R",
+                    }
+                )
+                logging.warning(
+                    f"Using default handedness (R/R) for player {missing_id}"
+                )
+
+            if missing_data:
+                missing_df = pl.DataFrame(
+                    missing_data,
+                    schema={
+                        "player_id": pl.Int64,
+                        "bat_side": pl.Utf8,
+                        "pitch_hand": pl.Utf8,
+                    },
+                )
+                df = pl.concat([df, missing_df], how="vertical")
+
+        logging.info(f"Successfully fetched handedness for {len(df)} players")
+        return df.sort("player_id")
+
+    except Exception as e:
+        logging.error(f"Error fetching player handedness: {e}", exc_info=True)
+
+        # Return DataFrame with defaults for all requested players
+        default_data = []
+        for player_id in player_ids:
+            default_data.append(
+                {
+                    "player_id": player_id,
+                    "bat_side": "R",
+                    "pitch_hand": "R",
+                }
+            )
+
+        return pl.DataFrame(
+            default_data,
+            schema={
+                "player_id": pl.Int64,
+                "bat_side": pl.Utf8,
+                "pitch_hand": pl.Utf8,
+            },
+        )
+
+
+def get_game_handedness_data(lineup_data: dict) -> pl.DataFrame:
+    """
+    Get handedness data for all players in a game's lineups.
+
+    Args:
+        lineup_data: Dictionary containing home/away lineups from get_batting_orders()
+
+    Returns:
+        Polars DataFrame with handedness data for all players in the game
+    """
+
+    # Collect all unique player IDs from the game
+    all_player_ids = set()
+
+    # Add batters
+    if "home" in lineup_data and "batter_ids" in lineup_data["home"]:
+        all_player_ids.update(lineup_data["home"]["batter_ids"])
+
+    if "away" in lineup_data and "batter_ids" in lineup_data["away"]:
+        all_player_ids.update(lineup_data["away"]["batter_ids"])
+
+    # Add pitchers
+    if "home" in lineup_data and "pitcher_id" in lineup_data["home"]:
+        pitcher_ids = lineup_data["home"]["pitcher_id"]
+        if isinstance(pitcher_ids, list):
+            all_player_ids.update(pitcher_ids)
+        else:
+            all_player_ids.add(pitcher_ids)
+
+    if "away" in lineup_data and "pitcher_id" in lineup_data["away"]:
+        pitcher_ids = lineup_data["away"]["pitcher_id"]
+        if isinstance(pitcher_ids, list):
+            all_player_ids.update(pitcher_ids)
+        else:
+            all_player_ids.add(pitcher_ids)
+
+    # Convert to list and fetch handedness data
+    player_ids_list = list(all_player_ids)
+
+    logging.info(f"Fetching handedness for {len(player_ids_list)} players in game")
+
+    return fetch_player_handedness(player_ids_list)
+
+
+def add_handedness_to_projections(
+    projections_df: pl.DataFrame,
+    handedness_df: pl.DataFrame,
+    player_id_col: str = "xMLBAMID",
+) -> pl.DataFrame:
+    """
+    Add handedness data to player projections DataFrame.
+
+    Args:
+        projections_df: DataFrame with player projections
+        handedness_df: DataFrame with handedness data from fetch_player_handedness()
+        player_id_col: Column name in projections_df that contains player IDs
+
+    Returns:
+        Projections DataFrame with added 'stand' and 'p_throws' columns
+    """
+
+    # Join handedness data to projections
+    enhanced_df = projections_df.join(
+        handedness_df.select(
+            [
+                pl.col("player_id"),
+                pl.col("bat_side").alias("stand"),
+                pl.col("pitch_hand").alias("p_throws"),
+            ]
+        ),
+        left_on=player_id_col,
+        right_on="player_id",
+        how="left",
+    )
+
+    # Fill missing handedness with defaults
+    enhanced_df = enhanced_df.with_columns(
+        [
+            pl.col("stand").fill_null("R"),
+            pl.col("p_throws").fill_null("R"),
+        ]
+    )
+
+    return enhanced_df
+
+
+def enhance_projections_with_handedness(
+    bat_projections_df: pl.DataFrame,
+    pit_projections_df: pl.DataFrame,
+    lineup_data: dict,
+) -> tuple[pl.DataFrame, pl.DataFrame]:
+    """
+    Complete pipeline to add handedness data to both batter and pitcher projections.
+
+    Args:
+        bat_projections_df: Batter projections DataFrame
+        pit_projections_df: Pitcher projections DataFrame
+        lineup_data: Lineup data from get_batting_orders()
+
+    Returns:
+        Tuple of (enhanced_bat_projections, enhanced_pit_projections)
+    """
+
+    # Get handedness for all players in the game
+    handedness_df = get_game_handedness_data(lineup_data)
+
+    # Add handedness to both projection DataFrames
+    enhanced_bat_df = add_handedness_to_projections(bat_projections_df, handedness_df)
+    enhanced_pit_df = add_handedness_to_projections(pit_projections_df, handedness_df)
+
+    return enhanced_bat_df, enhanced_pit_df
