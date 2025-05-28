@@ -44,11 +44,10 @@ def probability_to_american_odds(probability: float) -> int | None:
 
 
 # --- Main Analysis Function ---
-
-
 def calculate_probabilities_and_odds(
     all_results: list,
     num_simulations: int,
+    game_info: dict,
     max_bin_val: int = 5,
 ):
     """
@@ -59,10 +58,12 @@ def calculate_probabilities_and_odds(
         all_results (list): List of dictionaries, each representing one simulation run.
                             Example element: {'inning_1': {'away': {'H':h,'R':r,'BB':bb,'HR':hr}, ...}}
         num_simulations (int): The total number of simulations run.
+        game_info (dict, optional): Dictionary containing game information including team names.
+                                   Expected keys: 'away_name', 'home_name'
         max_bin_val (int): The threshold for the final '+' bin (e.g., 5 means bins 0,1,2,3,4,5+).
 
     Returns:
-        polars.DataFrame: A DataFrame with columns: inning, team, stat, number_bin,
+        polars.DataFrame: A DataFrame with columns: inning, team, team_name, stat, number_bin,
                           probability, decimal_odds, american_odds.
                           Returns None if num_simulations is zero or input is empty.
 
@@ -74,6 +75,15 @@ def calculate_probabilities_and_odds(
         return None
 
     plus_bin_label = f"{max_bin_val}+"  # e.g., "5+"
+
+    # Extract team names from game_info if provided
+    team_names = {}
+    if game_info:
+        team_names["away"] = game_info.get("away_name", "Away Team")
+        team_names["home"] = game_info.get("home_name", "Home Team")
+    else:
+        team_names["away"] = "Away Team"
+        team_names["home"] = "Home Team"
 
     # --- Initialize dictionaries to store counts ---
     results_counts = {}
@@ -164,7 +174,8 @@ def calculate_probabilities_and_odds(
                     data_for_df.append(
                         {
                             "inning": inn,
-                            "team": team,
+                            "team": team.capitalize(),
+                            "team_name": team_names[team],  # Add team name
                             "stat": stat,
                             "number_bin": number_bin_label,
                             "probability": probability,
@@ -184,6 +195,7 @@ def calculate_probabilities_and_odds(
     schema = {
         "inning": pl.Int64,
         "team": pl.Categorical,
+        "team_name": pl.Utf8,  # Add team_name column
         "stat": pl.Categorical,
         "number_bin": pl.Utf8,  # e.g., '0', '1', '5+'
         "probability": pl.Float64,

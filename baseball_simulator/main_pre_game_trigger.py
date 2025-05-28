@@ -108,7 +108,8 @@ def run_pre_game_simulation(game_pk):
     results_df = analysis.calculate_probabilities_and_odds(
         all_runs_results,
         num_sims,
-    )  # Assumes function exists
+        game_info=game_info,
+    )
 
     # 6. Store Results
     if results_df is not None:

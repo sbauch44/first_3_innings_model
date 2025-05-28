@@ -1,10 +1,12 @@
 import logging
 import random
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Optional
 
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
+
+logger = logging.getLogger(__name__)
 
 
 class BaseballSimulator:
@@ -51,35 +53,37 @@ class BaseballSimulator:
         self.league_avg_rates = league_avg_rates
 
         # --- Pre-calculate mean posterior parameters ---
-        logging.info(
+        logger.info(
             "Pre-calculating mean posterior parameters",
         )  # Optional: for feedback
         try:
             self.mean_intercepts_val = (
-                self.idata.posterior["intercepts"].mean(dim=("chain", "draw")).values
+                self.idata.posterior["intercepts"]
+                .mean(dim=("chain", "draw"))
+                .to_numpy()
             )
             self.mean_betas_val = (
-                self.idata.posterior["betas"].mean(dim=("chain", "draw")).values
+                self.idata.posterior["betas"].mean(dim=("chain", "draw")).to_numpy()
             )
 
             # Get n_predictors from the shape of mean_betas_val for later checks
             # Assuming mean_betas_val shape is (n_predictors, n_categories) or (n_predictors, n_categories-1)
             self.n_model_predictors = self.mean_betas_val.shape[0]
 
-            logging.info(
+            logger.info(
                 "Mean posterior parameters pre-calculated successfully.",
             )  # Optional
         except Exception as e:
-            logging.warning(
+            logger.warning(
                 f"FATAL ERROR: Could not pre-calculate mean posterior parameters during simulator initialization: {e}",
             )
-            logging.info(
+            logger.info(
                 "Make sure 'intercepts' and 'betas' exist in idata.posterior and are correctly formatted.",
             )
             raise
         # --- End of pre-calculation ---
 
-    def set_league_avg_rates(self, rates_dict: Dict[str, float]) -> None:
+    def set_league_avg_rates(self, rates_dict: dict[str, float]) -> None:
         """
         Update league average rates used in simulation.
 
@@ -89,7 +93,7 @@ class BaseballSimulator:
         """
         self.league_avg_rates.update(rates_dict)
 
-    def predict_pa_outcome_probs(self, pa_inputs_dict: Dict[str, float]) -> np.ndarray:
+    def predict_pa_outcome_probs(self, pa_inputs_dict: dict[str, float]) -> np.ndarray:
         """
         Predicts outcome probabilities for a single plate appearance using MEAN model posterior parameters.
 
@@ -104,26 +108,27 @@ class BaseballSimulator:
         try:
             input_list = [pa_inputs_dict[col] for col in self.predictor_cols]
             input_array = np.array(input_list).reshape(
-                1, -1,
+                1,
+                -1,
             )  # Reshape to 2D array (1 row)
         except KeyError as e:
-            logging.warning(f"Error: Missing key {e} in pa_inputs_dict")
-            logging.warning(f"Required keys: {self.predictor_cols}")
+            logger.warning(f"Error: Missing key {e} in pa_inputs_dict")
+            logger.warning(f"Required keys: {self.predictor_cols}")
             raise
 
         # Use Pandas for easier column selection based on names for scaling
         input_df = pd.DataFrame(input_array, columns=self.predictor_cols)
 
         # 2. Scale Continuous Features
-        continuous_data = input_df[self.continuous_cols].values
+        continuous_data = input_df[self.continuous_cols].to_numpy()
         try:
             scaled_continuous_data = self.scaler.transform(
                 continuous_data,
             )  # Use transform, NOT fit_transform
         except Exception as e:
-            logging.warning(f"Error scaling data: {e}")
-            logging.warning(f"Input data shape for scaling: {continuous_data.shape}")
-            logging.warning(f"Scaler expects {self.scaler.n_features_in_} features.")
+            logger.warning(f"Error scaling data: {e}")
+            logger.warning(f"Input data shape for scaling: {continuous_data.shape}")
+            logger.warning(f"Scaler expects {self.scaler.n_features_in_} features.")
             raise
 
         # 3. Combine Features
@@ -157,7 +162,7 @@ class BaseballSimulator:
         expected_beta_shape = (self.n_model_predictors, self.n_categories)
 
         if mean_intercepts.shape != expected_intercept_shape:
-            logging.warning(
+            logger.warning(
                 f"Warning: Mean intercepts shape mismatch. Expected {expected_intercept_shape}, got {mean_intercepts.shape}",
             )
             if mean_intercepts.shape == (self.n_categories - 1,):
@@ -169,7 +174,7 @@ class BaseballSimulator:
                 )
 
         if mean_betas.shape != expected_beta_shape:
-            logging.warning(
+            logger.warning(
                 f"Warning: Mean betas shape mismatch. Expected {expected_beta_shape}, got {mean_betas.shape}",
             )
             if mean_betas.shape == (self.n_model_predictors, self.n_categories - 1):
@@ -193,7 +198,7 @@ class BaseballSimulator:
 
         # Ensure probabilities sum roughly to 1
         if not np.isclose(np.sum(p_vector_mean), 1.0):
-            logging.warning(
+            logger.warning(
                 f"Warning: Probabilities do not sum to 1: {np.sum(p_vector_mean)}",
             )
             # Normalize as fallback
@@ -205,11 +210,11 @@ class BaseballSimulator:
         self,
         inning_num: int,
         is_top_inning: bool,
-        lineup: List[Dict[str, Any]],
+        lineup: list[dict[str, Any]],
         start_batter_idx: int,
-        pitcher_inputs: Dict[str, Any],
-        game_context: Dict[str, Any],
-    ) -> Tuple[int, int, int, int, int]:
+        pitcher_inputs: dict[str, Any],
+        game_context: dict[str, Any],
+    ) -> tuple[int, int, int, int, int]:
         """
         Simulates a single half-inning with realistic base running.
 
@@ -262,7 +267,7 @@ class BaseballSimulator:
                     else 0
                 )
             except KeyError as e:
-                logging.warning(
+                logger.warning(
                     f"Warning: Missing 'stand' or 'p_throws' in inputs: {e}. Assuming no platoon advantage.",
                 )
                 is_platoon = 0
@@ -284,7 +289,8 @@ class BaseballSimulator:
 
             possible_outcomes = list(self.outcome_labels.keys())
             simulated_outcome_code = np.random.choice(
-                possible_outcomes, p=outcome_probs,
+                possible_outcomes,
+                p=outcome_probs,
             )
             outcome_label = self.outcome_labels[simulated_outcome_code]
 
@@ -391,7 +397,8 @@ class BaseballSimulator:
                 is_gidp_opportunity = bases[0] == 1 and outs_before_pa < 2
                 # Use adjusted rate directly, as bb_type isn't predicted
                 adjusted_gidp_rate = self.league_avg_rates.get(
-                    "gidp_effective_rate", 0.065,
+                    "gidp_effective_rate",
+                    0.065,
                 )  # Use pre-calculated effective rate
 
                 if is_gidp_opportunity and random.random() < adjusted_gidp_rate:
@@ -434,12 +441,12 @@ class BaseballSimulator:
 
     def simulate_first_three_innings(
         self,
-        home_lineup: List[Dict[str, Any]],
-        away_lineup: List[Dict[str, Any]],
-        home_pitcher_inputs: Dict[str, Any],
-        away_pitcher_inputs: Dict[str, Any],
-        game_context: Dict[str, Any],
-    ) -> Dict[str, Dict[str, Dict[str, int]]]:
+        home_lineup: list[dict[str, Any]],
+        away_lineup: list[dict[str, Any]],
+        home_pitcher_inputs: dict[str, Any],
+        away_pitcher_inputs: dict[str, Any],
+        game_context: dict[str, Any],
+    ) -> dict[str, dict[str, dict[str, int]]]:
         """
         Simulates the first 3 innings of a game.
 
@@ -507,13 +514,13 @@ class BaseballSimulator:
 
     def run_multiple_simulations(
         self,
-        home_lineup: List[Dict[str, Any]],
-        away_lineup: List[Dict[str, Any]],
-        home_pitcher_inputs: Dict[str, Any],
-        away_pitcher_inputs: Dict[str, Any],
-        game_context: Dict[str, Any],
+        home_lineup: list[dict[str, Any]],
+        away_lineup: list[dict[str, Any]],
+        home_pitcher_inputs: dict[str, Any],
+        away_pitcher_inputs: dict[str, Any],
+        game_context: dict[str, Any],
         num_sims: int = 10000,
-    ) -> List[Dict[str, Dict[str, Dict[str, int]]]]:
+    ) -> list[dict[str, dict[str, dict[str, int]]]]:
         """
         Run multiple simulations of the first three innings.
 
@@ -530,7 +537,7 @@ class BaseballSimulator:
 
         """
         all_results = []
-        logging.info(f"Running {num_sims} game simulations...")  # noqa: G004
+        logger.info(f"Running {num_sims} game simulations...")  # noqa: G004
         for _ in tqdm(range(num_sims)):
             sim_result = self.simulate_first_three_innings(
                 home_lineup,
@@ -543,7 +550,7 @@ class BaseballSimulator:
 
         return all_results
 
-    def analyze_simulation_results(self, all_results: List[Dict]) -> Dict[str, Dict]:
+    def analyze_simulation_results(self, all_results: list[dict]) -> dict[str, dict]:
         """
         Analyze simulation results to calculate probabilities.
 
@@ -598,7 +605,7 @@ class BaseballSimulator:
 
         return prob_dict
 
-    def convert_probabilities_to_dataframe(self, prob_dict: Dict) -> pd.DataFrame:
+    def convert_probabilities_to_dataframe(self, prob_dict: dict) -> pd.DataFrame:
         """
         Convert the probability dictionary to a pandas DataFrame for easier analysis.
 
@@ -618,7 +625,7 @@ class BaseballSimulator:
                     int(inn_str.split("_")[1]) if "_" in inn_str else int(inn_str)
                 )
             except (IndexError, ValueError):
-                logging.warning(
+                logger.warning(
                     f"Warning: Could not parse inning number from key '{inn_str}'. Using as-is.",
                 )
                 inning_num = inn_str
@@ -643,7 +650,9 @@ class BaseballSimulator:
         return pd.DataFrame(columns=["inning", "team", "stat", "number", "probability"])
 
     def visualize_results(
-        self, prob_dict: Dict, output_file: Optional[str] = None,
+        self,
+        prob_dict: dict,
+        output_file: Optional[str] = None,
     ) -> None:
         """
         Create visualizations of simulation results.
@@ -711,111 +720,3 @@ class BaseballSimulator:
         except ImportError:
             print("Visualization requires matplotlib and seaborn packages.")
             return
-
-
-# def example_usage():
-#     """Example of how to use the BaseballSimulator class."""
-#     # Paths to model and scaler files
-#     model_path = "/path/to/multi_outcome_model.nc"
-#     scaler_path = "/path/to/pa_outcome_scaler.joblib"
-
-#     # Initialize simulator
-#     simulator = BaseballSimulator(model_path, scaler_path)
-
-#     # Define example lineup for home team (9 batters)
-#     home_lineup = [
-#         {
-#             'batter_k_pct_daily_input': 0.22,
-#             'batter_bb_pct_daily_input': 0.10,
-#             'batter_hbp_pct_daily_input': 0.01,
-#             'batter_1b_pct_daily_input': 0.16,
-#             'batter_2b_pct_daily_input': 0.05,
-#             'batter_3b_pct_daily_input': 0.005,
-#             'batter_hr_pct_daily_input': 0.04,
-#             'batter_non_k_out_pct_daily_input': 0.42,
-#             'stand': 'R'  # R for right, L for left
-#         },
-#         # Add 8 more batters with similar structure
-#     ]
-
-#     # Define example lineup for away team (9 batters)
-#     away_lineup = [
-#         {
-#             'batter_k_pct_daily_input': 0.25,
-#             'batter_bb_pct_daily_input': 0.08,
-#             'batter_hbp_pct_daily_input': 0.01,
-#             'batter_1b_pct_daily_input': 0.15,
-#             'batter_2b_pct_daily_input': 0.04,
-#             'batter_3b_pct_daily_input': 0.005,
-#             'batter_hr_pct_daily_input': 0.03,
-#             'batter_non_k_out_pct_daily_input': 0.44,
-#             'stand': 'L'
-#         },
-#         # Add 8 more batters with similar structure
-#     ]
-
-#     # Define pitcher inputs
-#     home_pitcher_inputs = {
-#         'pitcher_k_pct_a_daily_input': 0.26,
-#         'pitcher_bb_pct_a_daily_input': 0.08,
-#         'pitcher_hbp_pct_a_daily_input': 0.01,
-#         'pitcher_1b_pct_a_daily_input': 0.15,
-#         'pitcher_2b_pct_a_daily_input': 0.05,
-#         'pitcher_3b_pct_a_daily_input': 0.005,
-#         'pitcher_hr_pct_a_daily_input': 0.03,
-#         'pitcher_non_k_out_pct_a_daily_input': 0.42,
-#         'p_throws': 'R'  # R for right, L for left
-#     }
-
-#     away_pitcher_inputs = {
-#         'pitcher_k_pct_a_daily_input': 0.24,
-#         'pitcher_bb_pct_a_daily_input': 0.07,
-#         'pitcher_hbp_pct_a_daily_input': 0.01,
-#         'pitcher_1b_pct_a_daily_input': 0.16,
-#         'pitcher_2b_pct_a_daily_input': 0.05,
-#         'pitcher_3b_pct_a_daily_input': 0.005,
-#         'pitcher_hr_pct_a_daily_input': 0.035,
-#         'pitcher_non_k_out_pct_a_daily_input': 0.43,
-#         'p_throws': 'L'
-#     }
-
-#     # Define game context
-#     game_context = {
-#         'park_factor_input': 1.05,  # >1 is hitter-friendly, <1 is pitcher-friendly
-#         'home_team_defense_rating': 1.2,  # Defensive ability (OAA-based)
-#         'away_team_defense_rating': -0.5
-#     }
-
-#     # Run a single simulation
-#     result = simulator.simulate_first_three_innings(
-#         home_lineup, away_lineup, home_pitcher_inputs, away_pitcher_inputs, game_context
-#     )
-#     print("Single simulation result:")
-#     print(result)
-
-#     # Run multiple simulations (reduced for example)
-#     all_results = simulator.run_multiple_simulations(
-#         home_lineup, away_lineup, home_pitcher_inputs, away_pitcher_inputs, game_context, num_sims=100
-#     )
-
-#     # Analyze results
-#     prob_dict = simulator.analyze_simulation_results(all_results)
-#     print("\nProbability analysis:")
-#     for inning, teams in prob_dict.items():
-#         print(f"\n{inning}:")
-#         for team, stats in teams.items():
-#             print(f"  {team.upper()}:")
-#             for stat, bins in stats.items():
-#                 print(f"    {stat}: {bins}")
-
-#     # Example of converting results to a pandas DataFrame
-#     prob_df = simulator.convert_probabilities_to_dataframe(prob_dict)
-#     print("\nProbability DataFrame head:")
-#     print(prob_df.head(10))
-
-
-# if __name__ == "__main__":
-#     # This code only runs when the module is executed directly
-#     print("Baseball Simulator Module - Example usage can be run with example_usage()")
-#     # Uncommenting the next line would run the example
-#     # example_usage()
