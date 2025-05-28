@@ -26,7 +26,7 @@ def run_incremental_update_and_feature_recalc():
     and recalculates all rolling ballasted stats.
     Saves the updated historical data and the calculated rolling stats.
     """
-    logging.info("--- Starting Incremental Update and Feature Recalculation ---")
+    logger.info("--- Starting Incremental Update and Feature Recalculation ---")
 
     # --- 1. Fetch and Process Yesterday's Statcast Data ---
     yesterday = date.today() - timedelta(days=1)
@@ -294,7 +294,8 @@ def run_incremental_update_and_feature_recalc():
     )
     try:
         logger.info(
-            f"Saving fangraphs pitcher projections to: {final_pit_projections_path}",
+            "Saving fangraphs pitcher projections to: %s",
+            final_pit_projections_path,
         )
         formatted_pit_projections = (
             data_processor.process_fangraphs_pitcher_projections(
@@ -324,7 +325,7 @@ def run_daily_scheduling():
         if not schedule:
             logger.info("No games scheduled for today.")
             return
-        logger.info(f"Found {len(schedule)} games.")
+        logger.info("Found %d games.", len(schedule))
     except Exception as e:
         logger.error(f"Error fetching schedule from statsapi: {e}", exc_info=True)
         return
@@ -342,7 +343,8 @@ def run_daily_scheduling():
             # Basic validation
             if not game_pk or not game_start_str or not isinstance(game_pk, int):
                 logger.warning(
-                    f"  Skipping game due to missing pk or start time: {game}",
+                    "  Skipping game due to missing pk or start time: %s",
+                    game,
                 )
                 skipped_count += 1
                 continue
@@ -352,27 +354,32 @@ def run_daily_scheduling():
                 or "cancelled" in status
                 or "suspended" in status
             ):
-                logger.info(f"  Skipping game {game_pk} due to status: {status}")
+                logger.info("  Skipping game %s due to status: %s", game_pk, status)
                 skipped_count += 1
                 continue
 
             # Convert to datetime and calculate trigger time
             # Ensure timezone awareness - assumes fetched time is UTC ('Z')
-            game_start_utc = datetime.fromisoformat(
-                game_start_str.replace("Z", "+00:00"),
-            ).replace(tzinfo=pytz.utc)
+            # Game start time is already in UTC
+            game_start_utc = datetime.fromisoformat(game_start_str)
+            if game_start_utc.tzinfo is None:
+                game_start_utc = pytz.utc.localize(game_start_utc)
             trigger_time_utc = game_start_utc - timedelta(minutes=55)
 
             # Don't schedule tasks in the past
             if trigger_time_utc < datetime.now(pytz.utc):
                 logger.info(
-                    f"  Skipping game {game_pk} - Trigger time {trigger_time_utc} is in the past.",
+                    "Skipping game %s - Trigger time %s is in the past.",
+                    game_pk,
+                    trigger_time_utc,
                 )
                 skipped_count += 1
                 continue
 
             logger.info(
-                f"  Scheduling trigger for game {game_pk} at {trigger_time_utc} UTC",
+                "Scheduling trigger for game %s at %s UTC",
+                game_pk,
+                trigger_time_utc,
             )
             scheduled_count += 1
 
@@ -388,15 +395,17 @@ def run_daily_scheduling():
             #    scheduled_count -= 1 # Decrement if failed
             # --------------------------------------------------------------------------------------
 
-        except Exception as e:
-            logger.error(
-                f"Error processing/scheduling game {game.get('game_id', 'N/A')}: {e}",
-                exc_info=True,
+        except Exception:
+            logger.exception(
+                "Error processing/scheduling game %s",
+                game.get("game_id", "N/A"),
             )
             skipped_count += 1
 
     logger.info(
-        f"Attempted to schedule triggers for {scheduled_count} games. Skipped {skipped_count} games.",
+        "Attempted to schedule triggers for %d games. Skipped %d games.",
+        scheduled_count,
+        skipped_count,
     )
     logger.info("\n--- Daily Scheduling Complete ---")
 
