@@ -93,15 +93,15 @@ def run_pre_game_simulation(game_pk):
     num_sims = config.NUM_SIMULATIONS
     all_runs_results = []
     logger.info("Starting %d simulations...", num_sims)
-    for _ in range(num_sims):
-        run_result = simulator.simulate_first_three_innings(
-            home_lineup=sim_inputs["home_lineup_with_stats"],
-            away_lineup=sim_inputs["away_lineup_with_stats"],
-            home_pitcher_inputs=sim_inputs["home_pitcher_inputs"],
-            away_pitcher_inputs=sim_inputs["away_pitcher_inputs"],
-            game_context=sim_inputs["game_context"],
-        )
-        all_runs_results.append(run_result)
+
+    all_runs_results = simulator.run_multiple_simulations(
+        home_lineup=sim_inputs["home_lineup_with_stats"],
+        away_lineup=sim_inputs["away_lineup_with_stats"],
+        home_pitcher_inputs=sim_inputs["home_pitcher_inputs"],
+        away_pitcher_inputs=sim_inputs["away_pitcher_inputs"],
+        game_context=sim_inputs["game_context"],
+        num_sims=config.NUM_SIMULATIONS,
+    )
     logger.info("Simulations complete.")
 
     # 5. Analyze Results to get Probability DataFrame
