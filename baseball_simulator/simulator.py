@@ -423,6 +423,7 @@ class BaseballSimulator:
             runs += runs_this_pa
             hits += pa_hit
             walks += pa_walk
+            home_runs += pa_hr
             bases = new_bases
 
             # Move to next batter for next loop iteration
@@ -529,7 +530,7 @@ class BaseballSimulator:
 
         """
         all_results = []
-        logging.info(f"Running {num_sims} game simulations...")
+        logging.info(f"Running {num_sims} game simulations...")  # noqa: G004
         for _ in tqdm(range(num_sims)):
             sim_result = self.simulate_first_three_innings(
                 home_lineup,
