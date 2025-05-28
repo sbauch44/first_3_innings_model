@@ -6,7 +6,8 @@ import data_fetcher
 import polars as pl
 
 logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(module)s - %(message)s",
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(module)s - %(message)s",
 )
 
 
@@ -955,7 +956,8 @@ def format_pitcher_projections(
 
 
 def format_pitcher_projections_advanced_imputation(
-    df: pl.DataFrame, league_avg_rates: dict = config.LEAGUE_AVG_RATES,
+    df: pl.DataFrame,
+    league_avg_rates: dict = config.LEAGUE_AVG_RATES,
 ) -> pl.DataFrame:
     """
     Alternative method using more sophisticated 2B/3B imputation based on pitcher type.
@@ -1112,7 +1114,8 @@ def validate_pitcher_rates(df: pl.DataFrame) -> pl.DataFrame:
 
 
 def process_fangraphs_pitcher_projections(
-    raw_df: pl.DataFrame, use_advanced_imputation: bool = True,
+    raw_df: pl.DataFrame,
+    use_advanced_imputation: bool = True,
 ) -> pl.DataFrame:
     """
     Complete processing pipeline for FanGraphs pitcher projections.
@@ -1185,7 +1188,9 @@ def calculate_defensive_innings_played(df: pl.DataFrame) -> pl.DataFrame:
 
 
 def calculate_cumulative_defensive_stats(
-    df: pl.DataFrame, df_total_innings: pl.DataFrame, end_year=config.END_YEAR,
+    df: pl.DataFrame,
+    df_total_innings: pl.DataFrame,
+    end_year=config.END_YEAR,
 ) -> pl.DataFrame:
     """
     Calculate cumulative defensive stats for each player.
@@ -1221,18 +1226,22 @@ def calculate_cumulative_defensive_stats(
                 pl.col("total_innings_played").fill_null(0),
             ],
         )
-        .sort("player_id", "year")
     )
+
+    # Ensure correct chronological order before cumulative sum
+    df_full_history = df_full_history.sort("player_id", "year")
 
     df_final_cumulative = (
         df_full_history.with_columns(
             pl.col("outs_above_average")
             .cum_sum()
             .over("player_id")
+            .sort_by("year")
             .alias("cumulative_oaa_temp"),
             pl.col("total_innings_played")
             .cum_sum()
             .over("player_id")
+            .sort_by("year")
             .alias("cumulative_innings_temp"),
         )
         .with_columns(
@@ -1248,7 +1257,8 @@ def calculate_cumulative_defensive_stats(
             .alias("cumulative_innings_prior"),
         )
         .drop(
-            "cumulative_oaa_temp", "cumulative_innings_temp",
+            "cumulative_oaa_temp",
+            "cumulative_innings_temp",
         )  # Drop temporary columns
         .with_columns(
             outs_above_average_per_inning=(
@@ -1380,10 +1390,12 @@ def prepare_simulation_inputs(
             return None
 
         bat_projections_df = data_fetcher.add_handedness_to_projections(
-            bat_projections_df, handedness_df,
+            bat_projections_df,
+            handedness_df,
         )
         pit_projections_df = data_fetcher.add_handedness_to_projections(
-            pit_projections_df, handedness_df,
+            pit_projections_df,
+            handedness_df,
         )
 
         # Convert to dictionaries for easier lookup: player_id -> {stat: value, ...}
@@ -1406,7 +1418,8 @@ def prepare_simulation_inputs(
                         for col in config.BATTER_PREDICTOR_SUBSET
                     }
                     player_data["stand"] = stats.get(
-                        "stand", "R",
+                        "stand",
+                        "R",
                     )  # Ensure 'stand' is in projections
                     lineup_with_stats.append(player_data)
                 else:
@@ -1416,10 +1429,12 @@ def prepare_simulation_inputs(
             return lineup_with_stats
 
         home_lineup_with_stats = _get_lineup_with_stats(
-            lineup_data["home"]["batter_ids"], bat_projections_dict,
+            lineup_data["home"]["batter_ids"],
+            bat_projections_dict,
         )
         away_lineup_with_stats = _get_lineup_with_stats(
-            lineup_data["away"]["batter_ids"], bat_projections_dict,
+            lineup_data["away"]["batter_ids"],
+            bat_projections_dict,
         )
 
         if not home_lineup_with_stats or not away_lineup_with_stats:
@@ -1443,7 +1458,8 @@ def prepare_simulation_inputs(
             for col in config.PITCHER_PREDICTOR_SUBSET
         }
         final_home_pitcher_inputs["p_throws"] = home_pitcher_proj.get(
-            "p_throws", "R",
+            "p_throws",
+            "R",
         )  # Ensure 'p_throws' is in projections
 
         final_away_pitcher_inputs = {
@@ -1457,7 +1473,9 @@ def prepare_simulation_inputs(
         # Assumes 'player_defense_df' has 'player_id', 'year', 'cumulative_oaa_prior'.
         # 'year' here is game_year, so cumulative_oaa_prior is for *before* this season.
         def _calculate_team_defense(
-            fielder_id_list: list, defense_data: pl.DataFrame, current_game_year: int,
+            fielder_id_list: list,
+            defense_data: pl.DataFrame,
+            current_game_year: int,
         ):
             total_oaa_prior = 0
             fielders_counted = 0
