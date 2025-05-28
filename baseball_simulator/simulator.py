@@ -209,7 +209,7 @@ class BaseballSimulator:
         start_batter_idx: int,
         pitcher_inputs: Dict[str, Any],
         game_context: Dict[str, Any],
-    ) -> Tuple[int, int, int, int]:
+    ) -> Tuple[int, int, int, int, int]:
         """
         Simulates a single half-inning with realistic base running.
 
@@ -229,6 +229,7 @@ class BaseballSimulator:
         hits = 0
         runs = 0
         walks = 0  # Added walk tracking
+        home_runs = 0
         bases = [0, 0, 0]  # 0=empty, 1=runner present
         current_batter_idx = start_batter_idx
         lineup_len = len(lineup)
@@ -291,6 +292,7 @@ class BaseballSimulator:
             runs_this_pa = 0
             pa_hit = 0
             pa_walk = 0
+            pa_hr = 0
 
             # Store outs *before* this PA is resolved for GIDP check
             outs_before_pa = outs
@@ -379,6 +381,7 @@ class BaseballSimulator:
 
             elif outcome_label == "HomeRun":
                 pa_hit += 1
+                pa_hr += 1
                 runs_this_pa += 1 + sum(bases)
                 new_bases = [0, 0, 0]
 
@@ -426,7 +429,7 @@ class BaseballSimulator:
             current_batter_idx += 1
 
         # Inning Over
-        return hits, runs, walks, (current_batter_idx % lineup_len)
+        return hits, runs, walks, home_runs, (current_batter_idx % lineup_len)
 
     def simulate_first_three_innings(
         self,
@@ -460,7 +463,7 @@ class BaseballSimulator:
             inning_results = {"away": {}, "home": {}}
 
             # --- Top of Inning ---
-            away_hits, away_runs, away_walks, away_batter_idx_next = (
+            away_hits, away_runs, away_walks, away_hrs, away_batter_idx_next = (
                 self.simulate_single_inning(
                     inning,
                     True,
@@ -470,11 +473,16 @@ class BaseballSimulator:
                     game_context,
                 )
             )
-            inning_results["away"] = {"H": away_hits, "R": away_runs, "BB": away_walks}
+            inning_results["away"] = {
+                "H": away_hits,
+                "R": away_runs,
+                "BB": away_walks,
+                "HR": away_hrs,
+            }
             away_batter_idx = away_batter_idx_next  # Update for next away inning
 
             # --- Bottom of Inning ---
-            home_hits, home_runs, home_walks, home_batter_idx_next = (
+            home_hits, home_runs, home_walks, home_hrs, home_batter_idx_next = (
                 self.simulate_single_inning(
                     inning,
                     False,
@@ -484,7 +492,12 @@ class BaseballSimulator:
                     game_context,
                 )
             )
-            inning_results["home"] = {"H": home_hits, "R": home_runs, "BB": home_walks}
+            inning_results["home"] = {
+                "H": home_hits,
+                "R": home_runs,
+                "BB": home_walks,
+                "HR": home_hrs,
+            }
             home_batter_idx = home_batter_idx_next  # Update for next home inning
 
             results[f"inning_{inning}"] = inning_results
