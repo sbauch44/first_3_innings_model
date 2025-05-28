@@ -1,6 +1,5 @@
 arviz
 joblib
-json
 numpy
 pandas
 pathlib
