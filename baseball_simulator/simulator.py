@@ -678,7 +678,7 @@ class BaseballSimulator:
             # Flatten for easier indexing
             axes = axes.flatten()
 
-            stats = ["H", "R", "BB"]
+            stats = ["H", "R", "BB", "HR"]
             teams = ["away", "home"]
 
             for i, stat in enumerate(stats):
