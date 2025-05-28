@@ -46,7 +46,7 @@ def fetch_defensive_stats(YEAR):
 
 
 def fetch_fangraphs_projections(
-    position=None, cookies=config.FANGRAPHS_COOKIES, headers=config.FANGRAPHS_HEADERS
+    position=None, cookies=config.FANGRAPHS_COOKIES, headers=config.FANGRAPHS_HEADERS,
 ):
     if position not in ["pit", "bat"]:
         raise ValueError("Position must be 'pit' or 'bat'")
@@ -116,8 +116,8 @@ def fetch_player_handedness(player_ids: list[int]) -> pl.DataFrame:
         Polars DataFrame with columns: player_id, bat_side, pitch_hand
         bat_side and pitch_hand will be 'L', 'R', or 'S' (switch)
         Returns None for players not found
-    """
 
+    """
     if not player_ids:
         logging.warning("No player IDs provided to fetch_player_handedness")
         return pl.DataFrame(
@@ -125,7 +125,7 @@ def fetch_player_handedness(player_ids: list[int]) -> pl.DataFrame:
                 "player_id": pl.Int64,
                 "bat_side": pl.Utf8,
                 "pitch_hand": pl.Utf8,
-            }
+            },
         )
 
     # Convert to comma-separated string for API call
@@ -144,7 +144,7 @@ def fetch_player_handedness(player_ids: list[int]) -> pl.DataFrame:
                     "player_id": pl.Int64,
                     "bat_side": pl.Utf8,
                     "pitch_hand": pl.Utf8,
-                }
+                },
             )
 
         people_data = response["people"]
@@ -169,7 +169,7 @@ def fetch_player_handedness(player_ids: list[int]) -> pl.DataFrame:
                     "player_id": player_id,
                     "bat_side": bat_side,
                     "pitch_hand": pitch_hand,
-                }
+                },
             )
 
             logging.debug(f"Player {player_id}: bats {bat_side}, throws {pitch_hand}")
@@ -199,10 +199,10 @@ def fetch_player_handedness(player_ids: list[int]) -> pl.DataFrame:
                         "player_id": missing_id,
                         "bat_side": "R",  # Default to right-handed
                         "pitch_hand": "R",
-                    }
+                    },
                 )
                 logging.warning(
-                    f"Using default handedness (R/R) for player {missing_id}"
+                    f"Using default handedness (R/R) for player {missing_id}",
                 )
 
             if missing_data:
@@ -230,7 +230,7 @@ def fetch_player_handedness(player_ids: list[int]) -> pl.DataFrame:
                     "player_id": player_id,
                     "bat_side": "R",
                     "pitch_hand": "R",
-                }
+                },
             )
 
         return pl.DataFrame(
@@ -252,8 +252,8 @@ def get_game_handedness_data(lineup_data: dict) -> pl.DataFrame:
 
     Returns:
         Polars DataFrame with handedness data for all players in the game
-    """
 
+    """
     # Collect all unique player IDs from the game
     all_player_ids = set()
 
@@ -302,8 +302,8 @@ def add_handedness_to_projections(
 
     Returns:
         Projections DataFrame with added 'stand' and 'p_throws' columns
-    """
 
+    """
     # Join handedness data to projections
     enhanced_df = projections_df.join(
         handedness_df.select(
@@ -311,7 +311,7 @@ def add_handedness_to_projections(
                 pl.col("player_id"),
                 pl.col("bat_side").alias("stand"),
                 pl.col("pitch_hand").alias("p_throws"),
-            ]
+            ],
         ),
         left_on=player_id_col,
         right_on="player_id",
@@ -323,7 +323,7 @@ def add_handedness_to_projections(
         [
             pl.col("stand").fill_null("R"),
             pl.col("p_throws").fill_null("R"),
-        ]
+        ],
     )
 
     return enhanced_df
@@ -344,8 +344,8 @@ def enhance_projections_with_handedness(
 
     Returns:
         Tuple of (enhanced_bat_projections, enhanced_pit_projections)
-    """
 
+    """
     # Get handedness for all players in the game
     handedness_df = get_game_handedness_data(lineup_data)
 

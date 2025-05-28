@@ -312,7 +312,7 @@ MAPPING_DF = pl.DataFrame(
     {
         "team_name": list(team_mapping.values()),
         "team_abbr": list(team_mapping.keys()),
-    }
+    },
 )
 
 

@@ -40,7 +40,7 @@ def run_incremental_update_and_feature_recalc():
         logging.info(f"Fetched {df_new_raw.shape[0]} new raw rows.")
     except Exception as e:
         logging.error(
-            f"Error fetching Statcast data for {yesterday_str}: {e}", exc_info=True
+            f"Error fetching Statcast data for {yesterday_str}: {e}", exc_info=True,
         )  # Log error with traceback
         return False  # Indicate failure
 
@@ -62,7 +62,7 @@ def run_incremental_update_and_feature_recalc():
     try:
         df_historical_pa_helpers = pl.read_parquet(historical_pa_helpers_path)
         logging.info(
-            f"Loaded {df_historical_pa_helpers.shape[0]} historical PA records."
+            f"Loaded {df_historical_pa_helpers.shape[0]} historical PA records.",
         )
         # --- 3. Union New Data with Historical ---
         df_pa_full_updated = pl.concat(
@@ -83,7 +83,7 @@ def run_incremental_update_and_feature_recalc():
     # --- 4. Save Updated Combined PA Data (with helpers) ---
     try:
         logging.info(
-            f"Saving updated historical PA data to: {historical_pa_helpers_path}"
+            f"Saving updated historical PA data to: {historical_pa_helpers_path}",
         )
         df_pa_full_updated.write_parquet(historical_pa_helpers_path)
     except Exception as e:
@@ -100,18 +100,18 @@ def run_incremental_update_and_feature_recalc():
     try:
         logging.info("Recalculating daily aggregates...")
         df_batter_daily = data_processor.calculate_batter_daily_totals(
-            df_pa_full_updated
+            df_pa_full_updated,
         )
         df_pitcher_daily = data_processor.calculate_pitcher_daily_totals(
-            df_pa_full_updated
+            df_pa_full_updated,
         )
 
         logging.info("Recalculating cumulative stats...")
         df_batter_daily = data_processor.calculate_cumulative_batter_stats(
-            df_batter_daily
+            df_batter_daily,
         )
         df_pitcher_daily = data_processor.calculate_cumulative_pitcher_stats(
-            df_pitcher_daily
+            df_pitcher_daily,
         )
 
         logging.info("Applying ballast and calculating final rolling stats...")
@@ -134,7 +134,7 @@ def run_incremental_update_and_feature_recalc():
         logging.info("selecting relevant batter and pitcher columns...")
         batter_cols = data_processor.get_cols_to_join(df_batter_daily_final, "batter")
         pitcher_cols = data_processor.get_cols_to_join(
-            df_pitcher_daily_final, "pitcher"
+            df_pitcher_daily_final, "pitcher",
         )
 
         logging.info("filtering dataframe to only include relevant columns...")
@@ -151,7 +151,7 @@ def run_incremental_update_and_feature_recalc():
 
         logging.info("Joining daily stats back to the original dataframe...")
         main_df = data_processor.join_together_final_df(
-            df_pa_full_updated, batter_stats_to_join, pitcher_stats_to_join
+            df_pa_full_updated, batter_stats_to_join, pitcher_stats_to_join,
         )
     except Exception as e:
         logging.error(f"Error during joining daily stats: {e}", exc_info=True)
@@ -177,7 +177,7 @@ def run_incremental_update_and_feature_recalc():
         logging.info(f"Fetched {park_factors_df.shape[0]} new raw rows.")
     except Exception as e:
         logging.error(
-            f"Error fetching park factors data for {yesterday_str}: {e}", exc_info=True
+            f"Error fetching park factors data for {yesterday_str}: {e}", exc_info=True,
         )  # Log error with traceback
         return False  # Indicate failure
 
@@ -187,7 +187,7 @@ def run_incremental_update_and_feature_recalc():
         logging.info("Transforming park factors data...")
         park_factors_df = data_processor.calculate_park_factors(park_factors_df)
         logging.info(
-            f"Saving transformed park factors data to: {final_park_factors_path}"
+            f"Saving transformed park factors data to: {final_park_factors_path}",
         )
         park_factors_df.write_parquet(final_park_factors_path)
     except Exception as e:
@@ -213,20 +213,20 @@ def run_incremental_update_and_feature_recalc():
     final_defensive_stats_path = f"{config.BASE_FILE_PATH}defensive_stats.parquet"
     if defensive_stats_df is None:
         logging.warning(
-            "No defensive stats DataFrame to process. Skipping transformation and save."
+            "No defensive stats DataFrame to process. Skipping transformation and save.",
         )
         return True
     try:
         logging.info("Transforming defensive stats data...")
         defensive_total_innings = data_processor.calculate_defensive_innings_played(
-            df_pa_full_updated
+            df_pa_full_updated,
         )
         final_defensive_stats = data_processor.calculate_cumulative_defensive_stats(
-            defensive_stats_df, defensive_total_innings
+            defensive_stats_df, defensive_total_innings,
         )
 
         logging.info(
-            f"Saving transformed defensive stats data to: {final_defensive_stats_path}"
+            f"Saving transformed defensive stats data to: {final_defensive_stats_path}",
         )
         final_defensive_stats.write_parquet(final_defensive_stats_path)
     except Exception as e:
@@ -241,11 +241,11 @@ def run_incremental_update_and_feature_recalc():
             logging.info("No new Fangraphs batter projections data found.")
             return True  # Indicate success even if no new data
         logging.info(
-            f"Fetched {fangraphs_bat_proj_df.shape[0]} new Fangraphs batter projections."
+            f"Fetched {fangraphs_bat_proj_df.shape[0]} new Fangraphs batter projections.",
         )
     except Exception as e:
         logging.error(
-            f"Error fetching Fangraphs batter projections: {e}", exc_info=True
+            f"Error fetching Fangraphs batter projections: {e}", exc_info=True,
         )
         return False  # Indicate failure
 
@@ -256,11 +256,11 @@ def run_incremental_update_and_feature_recalc():
             logging.info("No new Fangraphs pitching projections data found.")
             return True
         logging.info(
-            f"Fetched {fangraphs_pit_proj_df.shape[0]} new Fangraphs pitching projections."
+            f"Fetched {fangraphs_pit_proj_df.shape[0]} new Fangraphs pitching projections.",
         )
     except Exception as e:
         logging.error(
-            f"Error fetching Fangraphs pitching projections: {e}", exc_info=True
+            f"Error fetching Fangraphs pitching projections: {e}", exc_info=True,
         )
         return False
 
@@ -270,10 +270,10 @@ def run_incremental_update_and_feature_recalc():
     )
     try:
         logging.info(
-            f"Saving fangraphs batter projections to: {final_bat_projections_path}"
+            f"Saving fangraphs batter projections to: {final_bat_projections_path}",
         )
         formatted_bat_projections = data_processor.process_fangraphs_batter_projections(
-            fangraphs_bat_proj_df
+            fangraphs_bat_proj_df,
         )
         formatted_bat_projections.write_parquet(final_bat_projections_path)
     except Exception as e:
@@ -285,7 +285,7 @@ def run_incremental_update_and_feature_recalc():
     )
     try:
         logging.info(
-            f"Saving fangraphs pitcher projections to: {final_pit_projections_path}"
+            f"Saving fangraphs pitcher projections to: {final_pit_projections_path}",
         )
         formatted_pit_projections = (
             data_processor.process_fangraphs_pitcher_projections(
@@ -333,7 +333,7 @@ def run_daily_scheduling():
             # Basic validation
             if not game_pk or not game_start_str or not isinstance(game_pk, int):
                 logging.warning(
-                    f"  Skipping game due to missing pk or start time: {game}"
+                    f"  Skipping game due to missing pk or start time: {game}",
                 )
                 skipped_count += 1
                 continue
@@ -350,20 +350,20 @@ def run_daily_scheduling():
             # Convert to datetime and calculate trigger time
             # Ensure timezone awareness - assumes fetched time is UTC ('Z')
             game_start_utc = datetime.fromisoformat(
-                game_start_str.replace("Z", "+00:00")
+                game_start_str.replace("Z", "+00:00"),
             ).replace(tzinfo=pytz.utc)
             trigger_time_utc = game_start_utc - timedelta(minutes=55)
 
             # Don't schedule tasks in the past
             if trigger_time_utc < datetime.now(pytz.utc):
                 logging.info(
-                    f"  Skipping game {game_pk} - Trigger time {trigger_time_utc} is in the past."
+                    f"  Skipping game {game_pk} - Trigger time {trigger_time_utc} is in the past.",
                 )
                 skipped_count += 1
                 continue
 
             logging.info(
-                f"  Scheduling trigger for game {game_pk} at {trigger_time_utc} UTC"
+                f"  Scheduling trigger for game {game_pk} at {trigger_time_utc} UTC",
             )
             scheduled_count += 1
 
@@ -387,7 +387,7 @@ def run_daily_scheduling():
             skipped_count += 1
 
     logging.info(
-        f"Attempted to schedule triggers for {scheduled_count} games. Skipped {skipped_count} games."
+        f"Attempted to schedule triggers for {scheduled_count} games. Skipped {skipped_count} games.",
     )
     logging.info("\n--- Daily Scheduling Complete ---")
 
@@ -411,7 +411,7 @@ if __name__ == "__main__":
         run_daily_scheduling()
     else:
         logging.error(
-            "Halting daily process due to error during data update/recalculation."
+            "Halting daily process due to error during data update/recalculation.",
         )
 
     logging.info(f"Daily process finished at {datetime.now()}.")

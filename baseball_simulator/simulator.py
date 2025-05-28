@@ -52,7 +52,7 @@ class BaseballSimulator:
 
         # --- Pre-calculate mean posterior parameters ---
         logging.info(
-            "Pre-calculating mean posterior parameters"
+            "Pre-calculating mean posterior parameters",
         )  # Optional: for feedback
         try:
             self.mean_intercepts_val = (
@@ -67,14 +67,14 @@ class BaseballSimulator:
             self.n_model_predictors = self.mean_betas_val.shape[0]
 
             logging.info(
-                "Mean posterior parameters pre-calculated successfully."
+                "Mean posterior parameters pre-calculated successfully.",
             )  # Optional
         except Exception as e:
             logging.warning(
-                f"FATAL ERROR: Could not pre-calculate mean posterior parameters during simulator initialization: {e}"
+                f"FATAL ERROR: Could not pre-calculate mean posterior parameters during simulator initialization: {e}",
             )
             logging.info(
-                "Make sure 'intercepts' and 'betas' exist in idata.posterior and are correctly formatted."
+                "Make sure 'intercepts' and 'betas' exist in idata.posterior and are correctly formatted.",
             )
             raise
         # --- End of pre-calculation ---
@@ -104,7 +104,7 @@ class BaseballSimulator:
         try:
             input_list = [pa_inputs_dict[col] for col in self.predictor_cols]
             input_array = np.array(input_list).reshape(
-                1, -1
+                1, -1,
             )  # Reshape to 2D array (1 row)
         except KeyError as e:
             logging.warning(f"Error: Missing key {e} in pa_inputs_dict")
@@ -118,7 +118,7 @@ class BaseballSimulator:
         continuous_data = input_df[self.continuous_cols].values
         try:
             scaled_continuous_data = self.scaler.transform(
-                continuous_data
+                continuous_data,
             )  # Use transform, NOT fit_transform
         except Exception as e:
             logging.warning(f"Error scaling data: {e}")
@@ -158,19 +158,19 @@ class BaseballSimulator:
 
         if mean_intercepts.shape != expected_intercept_shape:
             logging.warning(
-                f"Warning: Mean intercepts shape mismatch. Expected {expected_intercept_shape}, got {mean_intercepts.shape}"
+                f"Warning: Mean intercepts shape mismatch. Expected {expected_intercept_shape}, got {mean_intercepts.shape}",
             )
             if mean_intercepts.shape == (self.n_categories - 1,):
                 mean_intercepts = np.concatenate([mean_intercepts, [0.0]])
                 self.mean_intercepts_val = mean_intercepts  # Optionally update the stored value if you allow this modification
             else:
                 raise ValueError(
-                    "Cannot resolve intercept shape mismatch with pre-calculated values."
+                    "Cannot resolve intercept shape mismatch with pre-calculated values.",
                 )
 
         if mean_betas.shape != expected_beta_shape:
             logging.warning(
-                f"Warning: Mean betas shape mismatch. Expected {expected_beta_shape}, got {mean_betas.shape}"
+                f"Warning: Mean betas shape mismatch. Expected {expected_beta_shape}, got {mean_betas.shape}",
             )
             if mean_betas.shape == (self.n_model_predictors, self.n_categories - 1):
                 ref_betas = np.zeros((self.n_model_predictors, 1))
@@ -178,7 +178,7 @@ class BaseballSimulator:
                 self.mean_betas_val = mean_betas  # Optionally update the stored value
             else:
                 raise ValueError(
-                    "Cannot resolve beta shape mismatch with pre-calculated values."
+                    "Cannot resolve beta shape mismatch with pre-calculated values.",
                 )
 
         # 5. Calculate Linear Predictor (mu)
@@ -194,7 +194,7 @@ class BaseballSimulator:
         # Ensure probabilities sum roughly to 1
         if not np.isclose(np.sum(p_vector_mean), 1.0):
             logging.warning(
-                f"Warning: Probabilities do not sum to 1: {np.sum(p_vector_mean)}"
+                f"Warning: Probabilities do not sum to 1: {np.sum(p_vector_mean)}",
             )
             # Normalize as fallback
             p_vector_mean = p_vector_mean / np.sum(p_vector_mean)
@@ -263,7 +263,7 @@ class BaseballSimulator:
                 )
             except KeyError as e:
                 logging.warning(
-                    f"Warning: Missing 'stand' or 'p_throws' in inputs: {e}. Assuming no platoon advantage."
+                    f"Warning: Missing 'stand' or 'p_throws' in inputs: {e}. Assuming no platoon advantage.",
                 )
                 is_platoon = 0
 
@@ -284,7 +284,7 @@ class BaseballSimulator:
 
             possible_outcomes = list(self.outcome_labels.keys())
             simulated_outcome_code = np.random.choice(
-                possible_outcomes, p=outcome_probs
+                possible_outcomes, p=outcome_probs,
             )
             outcome_label = self.outcome_labels[simulated_outcome_code]
 
@@ -391,7 +391,7 @@ class BaseballSimulator:
                 is_gidp_opportunity = bases[0] == 1 and outs_before_pa < 2
                 # Use adjusted rate directly, as bb_type isn't predicted
                 adjusted_gidp_rate = self.league_avg_rates.get(
-                    "gidp_effective_rate", 0.065
+                    "gidp_effective_rate", 0.065,
                 )  # Use pre-calculated effective rate
 
                 if is_gidp_opportunity and random.random() < adjusted_gidp_rate:
@@ -619,7 +619,7 @@ class BaseballSimulator:
                 )
             except (IndexError, ValueError):
                 logging.warning(
-                    f"Warning: Could not parse inning number from key '{inn_str}'. Using as-is."
+                    f"Warning: Could not parse inning number from key '{inn_str}'. Using as-is.",
                 )
                 inning_num = inn_str
 
@@ -633,7 +633,7 @@ class BaseballSimulator:
                                 "stat": stat,
                                 "number": number_bin,  # Keep as string ('0', '1', ..., '5+')
                                 "probability": probability,
-                            }
+                            },
                         )
 
         # Create DataFrame
@@ -643,7 +643,7 @@ class BaseballSimulator:
         return pd.DataFrame(columns=["inning", "team", "stat", "number", "probability"])
 
     def visualize_results(
-        self, prob_dict: Dict, output_file: Optional[str] = None
+        self, prob_dict: Dict, output_file: Optional[str] = None,
     ) -> None:
         """
         Create visualizations of simulation results.

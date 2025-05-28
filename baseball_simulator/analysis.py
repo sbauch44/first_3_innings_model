@@ -44,7 +44,7 @@ def probability_to_american_odds(probability: float) -> int | None:
 
 
 def calculate_probabilities_and_odds(
-    all_results: list, num_simulations: int, max_bin_val: int = 5
+    all_results: list, num_simulations: int, max_bin_val: int = 5,
 ):
     """
     Analyzes simulation results to calculate probabilities and odds for
@@ -64,7 +64,7 @@ def calculate_probabilities_and_odds(
     """
     if not all_results or num_simulations <= 0:
         print(
-            "Warning: No simulation results provided or num_simulations is zero. Cannot calculate probabilities."
+            "Warning: No simulation results provided or num_simulations is zero. Cannot calculate probabilities.",
         )
         return None
 
@@ -115,12 +115,12 @@ def calculate_probabilities_and_odds(
                 except TypeError:
                     # Handle cases where H/BB/HR might not be numbers if sim failed partially
                     print(
-                        f"Warning: Invalid data type found for {inn_key}/{team} in a sim result. Skipping entry."
+                        f"Warning: Invalid data type found for {inn_key}/{team} in a sim result. Skipping entry.",
                     )
                     continue
                 except KeyError as e:
                     print(
-                        f"Warning: Missing key {e} in {inn_key}/{team}. Skipping entry."
+                        f"Warning: Missing key {e} in {inn_key}/{team}. Skipping entry.",
                     )
                     continue  # Skip this entry if structure is wrong
 
@@ -160,7 +160,7 @@ def calculate_probabilities_and_odds(
                             "probability": probability,
                             "decimal_odds": decimal_odds,
                             "american_odds": american_odds,
-                        }
+                        },
                     )
                     # Break after processing the max_bin_val bin (which represents X+)
                     if i == max_bin_val:

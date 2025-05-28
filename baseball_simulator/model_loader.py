@@ -5,14 +5,17 @@ import joblib
 
 
 class ModelLoader:
-    """
-    A class to load and manage a Bayesian model and its associated scaler.
-    """
+    """A class to load and manage a Bayesian model and its associated scaler."""
 
-    def __init__(self, base_dir=None, model_filename="multi_outcome_model.nc", scaler_filename="pa_outcome_scaler.joblib"):
+    def __init__(
+        self,
+        base_dir=None,
+        model_filename="multi_outcome_model.nc",
+        scaler_filename="pa_outcome_scaler.joblib",
+    ):
         """
         Initialize the ModelLoader with paths to the model and scaler files.
-        
+
         Parameters
         ----------
         base_dir : str or Path, optional
@@ -44,7 +47,7 @@ class ModelLoader:
     def set_paths(self, base_dir=None, model_filename=None, scaler_filename=None):
         """
         Update the file paths.
-        
+
         Parameters
         ----------
         base_dir : str or Path, optional
@@ -73,7 +76,7 @@ class ModelLoader:
     def load_model(self):
         """
         Load the Bayesian model using arviz.
-        
+
         Returns
         -------
         arviz.InferenceData
@@ -87,7 +90,7 @@ class ModelLoader:
     def load_scaler(self):
         """
         Load the scaler using joblib.
-        
+
         Returns
         -------
         object
@@ -101,7 +104,7 @@ class ModelLoader:
     def load_all(self):
         """
         Load both the model and scaler.
-        
+
         Returns
         -------
         tuple

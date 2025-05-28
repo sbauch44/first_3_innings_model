@@ -6,7 +6,7 @@ import data_fetcher
 import polars as pl
 
 logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(module)s - %(message)s"
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(module)s - %(message)s",
 )
 
 
@@ -78,7 +78,7 @@ def create_helper_columns(df: pl.DataFrame) -> pl.DataFrame:
                 "field_error",
                 "fielders_choice_out",
                 "fielders_choice",
-            ]
+            ],
         ),
         is_hit=pl.col("events").is_in(["single", "double", "triple", "home_run"]),
         is_k=pl.col("events").is_in(["strikeout", "strikeout_double_play"]),
@@ -102,7 +102,7 @@ def create_helper_columns(df: pl.DataFrame) -> pl.DataFrame:
                 "field_error",  # Typically counts as an out for the model's purpose
                 "fielders_choice_out",
                 "fielders_choice",
-            ]
+            ],
         ),
     )
     return df
@@ -213,7 +213,7 @@ def calculate_cumulative_batter_stats(df: pl.DataFrame) -> pl.DataFrame:
                 .over("batter")
                 .sort_by("game_date")
                 .alias("tmp_cum_hr_prev_day"),
-            ]
+            ],
         )
         .with_columns(
             pl.col("tmp_cum_pa_prev_day")
@@ -324,7 +324,7 @@ def calculate_cumulative_pitcher_stats(df: pl.DataFrame) -> pl.DataFrame:
                 .over("pitcher")
                 .sort_by("game_date")
                 .alias("tmp_cum_hr_a_prev_day"),
-            ]
+            ],
         )
         .with_columns(
             pl.col("tmp_cum_pa_a_prev_day")
@@ -475,7 +475,7 @@ def calculate_ballasted_batter_stats(
                     + ballast_weights["batter"]["is_hr"]["value"]
                 )
             ).alias("batter_hr_pct_daily_input"),
-        ]
+        ],
     ).with_columns(
         batter_non_k_out_pct_daily_input=(
             1
@@ -591,7 +591,7 @@ def calculate_ballasted_pitcher_stats(
                     + ballast_weights["pitcher"]["is_hr"]["value"]
                 )
             ).alias("pitcher_hr_pct_a_daily_input"),
-        ]
+        ],
     ).with_columns(
         pitcher_non_k_out_pct_a_daily_input=(
             1
@@ -633,7 +633,7 @@ def select_subset_of_cols(df, position, cols):
             position,
             "game_date",
             *cols,
-        ]
+        ],
     )
     return df
 
@@ -663,7 +663,7 @@ def join_together_final_df(main_df, df_bat, df_pitch):
             ),
             is_batter_home=(
                 pl.when(
-                    pl.col("inning_topbot") == "Bot"
+                    pl.col("inning_topbot") == "Bot",
                 )  # Bottom of inning means home team batting
                 .then(pl.lit(1))
                 .otherwise(pl.lit(0))  # Top of inning means away team batting
@@ -687,8 +687,8 @@ def format_batter_projections(df: pl.DataFrame) -> pl.DataFrame:
 
     Returns:
         Formatted DataFrame with simulation-ready column names and rates
-    """
 
+    """
     # Create the formatted DataFrame with rate calculations
     formatted_df = (
         df.with_columns(
@@ -700,10 +700,10 @@ def format_batter_projections(df: pl.DataFrame) -> pl.DataFrame:
                 (pl.col("HR") / pl.col("PA")).alias("batter_hr_pct_daily_input"),
                 (pl.col("SO") / pl.col("PA")).alias("batter_k_pct_daily_input"),
                 ((pl.col("BB") + pl.col("IBB")) / pl.col("PA")).alias(
-                    "batter_bb_pct_daily_input"
+                    "batter_bb_pct_daily_input",
                 ),
                 (pl.col("HBP") / pl.col("PA")).alias("batter_hbp_pct_daily_input"),
-            ]
+            ],
         )
         .with_columns(
             [
@@ -720,8 +720,8 @@ def format_batter_projections(df: pl.DataFrame) -> pl.DataFrame:
                         + pl.col("batter_bb_pct_daily_input")
                         + pl.col("batter_hbp_pct_daily_input")
                     )
-                ).alias("batter_non_k_out_pct_daily_input")
-            ]
+                ).alias("batter_non_k_out_pct_daily_input"),
+            ],
         )
         # .with_columns(
         #     [
@@ -760,7 +760,7 @@ def format_batter_projections(df: pl.DataFrame) -> pl.DataFrame:
                 "IBB",
                 "SO",
                 "HBP",
-            ]
+            ],
         )
     )
 
@@ -776,8 +776,8 @@ def validate_batter_rates(df: pl.DataFrame) -> pl.DataFrame:
 
     Returns:
         DataFrame with validation results added
-    """
 
+    """
     validation_df = df.with_columns(
         [
             # Calculate sum of all rates - should equal 1.0
@@ -791,13 +791,13 @@ def validate_batter_rates(df: pl.DataFrame) -> pl.DataFrame:
                 + pl.col("batter_hbp_pct_daily_input")
                 + pl.col("batter_non_k_out_pct_daily_input")
             ).alias(
-                "total_rate_sum"
+                "total_rate_sum",
             ),  # Flag players with rate sums significantly different from 1.0
-        ]
+        ],
     ).with_columns(
         (
             pl.when(
-                (pl.col("total_rate_sum") < 0.99) | (pl.col("total_rate_sum") > 1.01)
+                (pl.col("total_rate_sum") < 0.99) | (pl.col("total_rate_sum") > 1.01),
             )
             .then(pl.lit(True))
             .otherwise(pl.lit(False))
@@ -808,7 +808,7 @@ def validate_batter_rates(df: pl.DataFrame) -> pl.DataFrame:
     warning_players = validation_df.filter(pl.col("rate_sum_warning"))
     if not warning_players.is_empty():
         logging.warning(
-            f"Found {warning_players.height} players with rate sums != 1.0:"
+            f"Found {warning_players.height} players with rate sums != 1.0:",
         )
         for row in warning_players.select(["PlayerName", "total_rate_sum"]).to_dicts():
             logging.warning(f"  {row['PlayerName']}: {row['total_rate_sum']:.4f}")
@@ -825,8 +825,8 @@ def process_fangraphs_batter_projections(raw_df: pl.DataFrame) -> pl.DataFrame:
 
     Returns:
         Simulation-ready batter projections
-    """
 
+    """
     logging.info(f"Processing {raw_df.height} batter projections...")
 
     # Format the projections
@@ -859,8 +859,8 @@ def format_pitcher_projections(
 
     Returns:
         Formatted DataFrame with simulation-ready column names and rates
-    """
 
+    """
     formatted_df = (
         df.with_columns(
             [
@@ -871,19 +871,19 @@ def format_pitcher_projections(
                 (pl.col("HBP") / pl.col("TBF")).alias("pitcher_hbp_pct_a_daily_input"),
                 # Calculate total hit rate
                 (pl.col("H") / pl.col("TBF")).alias("total_hit_rate"),
-            ]
+            ],
         )
         .with_columns(
             [
                 # Method 1: Impute 2B and 3B from league averages
                 # This is the safer approach for missing data
                 pl.lit(league_avg_rates["lg_2b_pct"]).alias(
-                    "pitcher_2b_pct_a_daily_input"
+                    "pitcher_2b_pct_a_daily_input",
                 ),
                 pl.lit(league_avg_rates["lg_3b_pct"]).alias(
-                    "pitcher_3b_pct_a_daily_input"
+                    "pitcher_3b_pct_a_daily_input",
                 ),
-            ]
+            ],
         )
         .with_columns(
             [
@@ -893,8 +893,8 @@ def format_pitcher_projections(
                     - pl.col("pitcher_hr_pct_a_daily_input")
                     - pl.col("pitcher_2b_pct_a_daily_input")
                     - pl.col("pitcher_3b_pct_a_daily_input")
-                ).alias("pitcher_1b_pct_a_daily_input")
-            ]
+                ).alias("pitcher_1b_pct_a_daily_input"),
+            ],
         )
         .with_columns(
             [
@@ -910,8 +910,8 @@ def format_pitcher_projections(
                         + pl.col("pitcher_bb_pct_a_daily_input")
                         + pl.col("pitcher_hbp_pct_a_daily_input")
                     )
-                ).alias("pitcher_non_k_out_pct_a_daily_input")
-            ]
+                ).alias("pitcher_non_k_out_pct_a_daily_input"),
+            ],
         )
         .with_columns(
             [
@@ -919,7 +919,7 @@ def format_pitcher_projections(
                 pl.col("Throws").fill_null("R").alias("p_throws")
                 if "Throws" in df.columns
                 else pl.lit("R").alias("p_throws"),  # Default to right-handed
-            ]
+            ],
         )
         .select(
             [
@@ -947,7 +947,7 @@ def format_pitcher_projections(
                 "HBP",
                 "ERA",
                 "WHIP",
-            ]
+            ],
         )
     )
 
@@ -955,7 +955,7 @@ def format_pitcher_projections(
 
 
 def format_pitcher_projections_advanced_imputation(
-    df: pl.DataFrame, league_avg_rates: dict = config.LEAGUE_AVG_RATES
+    df: pl.DataFrame, league_avg_rates: dict = config.LEAGUE_AVG_RATES,
 ) -> pl.DataFrame:
     """
     Alternative method using more sophisticated 2B/3B imputation based on pitcher type.
@@ -964,7 +964,6 @@ def format_pitcher_projections_advanced_imputation(
     - High K pitchers tend to allow fewer 2B/3B when contact is made
     - High HR pitchers might allow more extra-base hits
     """
-
     formatted_df = (
         df.with_columns(
             [
@@ -974,7 +973,7 @@ def format_pitcher_projections_advanced_imputation(
                 (pl.col("BB") / pl.col("TBF")).alias("pitcher_bb_pct_a_daily_input"),
                 (pl.col("HBP") / pl.col("TBF")).alias("pitcher_hbp_pct_a_daily_input"),
                 (pl.col("H") / pl.col("TBF")).alias("total_hit_rate"),
-            ]
+            ],
         )
         .with_columns(
             [
@@ -982,7 +981,7 @@ def format_pitcher_projections_advanced_imputation(
                 (
                     pl.col("pitcher_k_pct_a_daily_input") / league_avg_rates["lg_k_pct"]
                 ).alias("k_rate_multiplier"),
-            ]
+            ],
         )
         .with_columns(
             [
@@ -1000,7 +999,7 @@ def format_pitcher_projections_advanced_imputation(
                     * league_avg_rates["lg_3b_rate_of_hits"]
                     * (2.0 - pl.col("k_rate_multiplier").clip(0.5, 1.5))
                 ).alias("pitcher_3b_pct_a_daily_input"),
-            ]
+            ],
         )
         .with_columns(
             [
@@ -1010,8 +1009,8 @@ def format_pitcher_projections_advanced_imputation(
                     - pl.col("pitcher_hr_pct_a_daily_input")
                     - pl.col("pitcher_2b_pct_a_daily_input")
                     - pl.col("pitcher_3b_pct_a_daily_input")
-                ).alias("pitcher_1b_pct_a_daily_input")
-            ]
+                ).alias("pitcher_1b_pct_a_daily_input"),
+            ],
         )
         .with_columns(
             [
@@ -1027,8 +1026,8 @@ def format_pitcher_projections_advanced_imputation(
                         + pl.col("pitcher_bb_pct_a_daily_input")
                         + pl.col("pitcher_hbp_pct_a_daily_input")
                     )
-                ).alias("pitcher_non_k_out_pct_a_daily_input")
-            ]
+                ).alias("pitcher_non_k_out_pct_a_daily_input"),
+            ],
         )
         .with_columns(
             [
@@ -1036,7 +1035,7 @@ def format_pitcher_projections_advanced_imputation(
                 pl.col("Throws").fill_null("R").alias("p_throws")
                 if "Throws" in df.columns
                 else pl.lit("R").alias("p_throws"),
-            ]
+            ],
         )
         .select(
             [
@@ -1064,7 +1063,7 @@ def format_pitcher_projections_advanced_imputation(
                 "HBP",
                 "ERA",
                 "WHIP",
-            ]
+            ],
         )
     )
 
@@ -1075,7 +1074,6 @@ def validate_pitcher_rates(df: pl.DataFrame) -> pl.DataFrame:
     """
     Validate that pitcher rates sum to approximately 1.0 and log any issues.
     """
-
     validation_df = df.with_columns(
         [
             # Calculate sum of all rates
@@ -1090,11 +1088,11 @@ def validate_pitcher_rates(df: pl.DataFrame) -> pl.DataFrame:
                 + pl.col("pitcher_non_k_out_pct_a_daily_input")
             ).alias("total_rate_sum"),
             # Flag problematic rate sums
-        ]
+        ],
     ).with_columns(
         (
             pl.when(
-                (pl.col("total_rate_sum") < 0.99) | (pl.col("total_rate_sum") > 1.01)
+                (pl.col("total_rate_sum") < 0.99) | (pl.col("total_rate_sum") > 1.01),
             )
             .then(pl.lit(True))
             .otherwise(pl.lit(False))
@@ -1105,7 +1103,7 @@ def validate_pitcher_rates(df: pl.DataFrame) -> pl.DataFrame:
     warning_players = validation_df.filter(pl.col("rate_sum_warning"))
     if not warning_players.is_empty():
         logging.warning(
-            f"Found {warning_players.height} pitchers with rate sums != 1.0:"
+            f"Found {warning_players.height} pitchers with rate sums != 1.0:",
         )
         for row in warning_players.select(["PlayerName", "total_rate_sum"]).to_dicts():
             logging.warning(f"  {row['PlayerName']}: {row['total_rate_sum']:.4f}")
@@ -1114,7 +1112,7 @@ def validate_pitcher_rates(df: pl.DataFrame) -> pl.DataFrame:
 
 
 def process_fangraphs_pitcher_projections(
-    raw_df: pl.DataFrame, use_advanced_imputation: bool = True
+    raw_df: pl.DataFrame, use_advanced_imputation: bool = True,
 ) -> pl.DataFrame:
     """
     Complete processing pipeline for FanGraphs pitcher projections.
@@ -1125,8 +1123,8 @@ def process_fangraphs_pitcher_projections(
 
     Returns:
         Simulation-ready pitcher projections
-    """
 
+    """
     logging.info(f"Processing {raw_df.height} pitcher projections...")
 
     # Choose imputation method
@@ -1187,7 +1185,7 @@ def calculate_defensive_innings_played(df: pl.DataFrame) -> pl.DataFrame:
 
 
 def calculate_cumulative_defensive_stats(
-    df: pl.DataFrame, df_total_innings: pl.DataFrame, end_year=config.END_YEAR
+    df: pl.DataFrame, df_total_innings: pl.DataFrame, end_year=config.END_YEAR,
 ) -> pl.DataFrame:
     """
     Calculate cumulative defensive stats for each player.
@@ -1221,7 +1219,7 @@ def calculate_cumulative_defensive_stats(
             [
                 pl.col("outs_above_average").fill_null(0),
                 pl.col("total_innings_played").fill_null(0),
-            ]
+            ],
         )
         .sort("player_id", "year")
     )
@@ -1250,7 +1248,7 @@ def calculate_cumulative_defensive_stats(
             .alias("cumulative_innings_prior"),
         )
         .drop(
-            "cumulative_oaa_temp", "cumulative_innings_temp"
+            "cumulative_oaa_temp", "cumulative_innings_temp",
         )  # Drop temporary columns
         .with_columns(
             outs_above_average_per_inning=(
@@ -1339,15 +1337,15 @@ def prepare_simulation_inputs(
             park_factor = park_factor_row.select("park_factor").item()
         else:
             logging.warning(
-                f"Park factor not found for {venue_id}, year {year}. Using default 100.0."
+                f"Park factor not found for {venue_id}, year {year}. Using default 100.0.",
             )
 
         # --- 2. Collect All Player IDs and Fetch Projections ---
         all_batter_ids = list(
-            set(lineup_data["home"]["batter_ids"] + lineup_data["away"]["batter_ids"])
+            set(lineup_data["home"]["batter_ids"] + lineup_data["away"]["batter_ids"]),
         )
         all_pitcher_ids = list(
-            set(lineup_data["home"]["pitcher_id"] + lineup_data["away"]["pitcher_id"])
+            set(lineup_data["home"]["pitcher_id"] + lineup_data["away"]["pitcher_id"]),
         )
         # Add fielder IDs for fetching their stand/p_throws if needed for defense logic,
         # or if defensive stats are also part of their general projection profile.
@@ -1360,7 +1358,7 @@ def prepare_simulation_inputs(
         # These fetcher functions should return DataFrames with player_id and the necessary stat columns
         # The column names in the returned DFs should match config.BATTER_PREDICTOR_SUBSET / PITCHER_PREDICTOR_SUBSET
         logging.info(
-            f"Fetching projections for {len(all_player_ids_for_projections)} players..."
+            f"Fetching projections for {len(all_player_ids_for_projections)} players...",
         )
         # Assume date_str for projections is derived from game_info['game_date']
         final_bat_projections_path = (
@@ -1382,10 +1380,10 @@ def prepare_simulation_inputs(
             return None
 
         bat_projections_df = data_fetcher.add_handedness_to_projections(
-            bat_projections_df, handedness_df
+            bat_projections_df, handedness_df,
         )
         pit_projections_df = data_fetcher.add_handedness_to_projections(
-            pit_projections_df, handedness_df
+            pit_projections_df, handedness_df,
         )
 
         # Convert to dictionaries for easier lookup: player_id -> {stat: value, ...}
@@ -1408,20 +1406,20 @@ def prepare_simulation_inputs(
                         for col in config.BATTER_PREDICTOR_SUBSET
                     }
                     player_data["stand"] = stats.get(
-                        "stand", "R"
+                        "stand", "R",
                     )  # Ensure 'stand' is in projections
                     lineup_with_stats.append(player_data)
                 else:
                     logging.warning(
-                        f"No projections found for batter ID: {player_id}. Omitting."
+                        f"No projections found for batter ID: {player_id}. Omitting.",
                     )
             return lineup_with_stats
 
         home_lineup_with_stats = _get_lineup_with_stats(
-            lineup_data["home"]["batter_ids"], bat_projections_dict
+            lineup_data["home"]["batter_ids"], bat_projections_dict,
         )
         away_lineup_with_stats = _get_lineup_with_stats(
-            lineup_data["away"]["batter_ids"], bat_projections_dict
+            lineup_data["away"]["batter_ids"], bat_projections_dict,
         )
 
         if not home_lineup_with_stats or not away_lineup_with_stats:
@@ -1430,10 +1428,10 @@ def prepare_simulation_inputs(
 
         # --- 4. Prepare Pitcher Inputs ---
         home_pitcher_proj = pit_projections_dict.get(
-            lineup_data["home"]["pitcher_id"][0]
+            lineup_data["home"]["pitcher_id"][0],
         )
         away_pitcher_proj = pit_projections_dict.get(
-            lineup_data["away"]["pitcher_id"][0]
+            lineup_data["away"]["pitcher_id"][0],
         )
 
         if not home_pitcher_proj or not away_pitcher_proj:
@@ -1445,7 +1443,7 @@ def prepare_simulation_inputs(
             for col in config.PITCHER_PREDICTOR_SUBSET
         }
         final_home_pitcher_inputs["p_throws"] = home_pitcher_proj.get(
-            "p_throws", "R"
+            "p_throws", "R",
         )  # Ensure 'p_throws' is in projections
 
         final_away_pitcher_inputs = {
@@ -1459,7 +1457,7 @@ def prepare_simulation_inputs(
         # Assumes 'player_defense_df' has 'player_id', 'year', 'cumulative_oaa_prior'.
         # 'year' here is game_year, so cumulative_oaa_prior is for *before* this season.
         def _calculate_team_defense(
-            fielder_id_list: list, defense_data: pl.DataFrame, current_game_year: int
+            fielder_id_list: list, defense_data: pl.DataFrame, current_game_year: int,
         ):
             total_oaa_prior = 0
             fielders_counted = 0
@@ -1471,12 +1469,12 @@ def prepare_simulation_inputs(
                 )
                 if not player_def_row.is_empty():
                     total_oaa_prior += player_def_row.select(
-                        "cumulative_oaa_prior"
+                        "cumulative_oaa_prior",
                     ).item(0, 0)
                     fielders_counted += 1
             # If you expect 8 fielders, you might log a warning if fielders_counted < 8
             logging.info(
-                f"Team defense calculated based on {fielders_counted} fielders, sum of prior OAA: {total_oaa_prior}"
+                f"Team defense calculated based on {fielders_counted} fielders, sum of prior OAA: {total_oaa_prior}",
             )
             return total_oaa_prior
 
@@ -1508,7 +1506,7 @@ def prepare_simulation_inputs(
             "game_context": game_context_for_sim,
         }
         logging.info(
-            f"Successfully prepared all simulation inputs for game_pk: {game_pk}"
+            f"Successfully prepared all simulation inputs for game_pk: {game_pk}",
         )
         return simulation_inputs
 
