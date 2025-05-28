@@ -16,14 +16,15 @@ def fetch_statcast_data():
     data = statcast(verbose=True)
     pl_data = pl.from_pandas(data)
     if pl_data.is_empty():
-        raise ValueError("No data found in the response.")
+        msg = "No data found in the response."
+        raise ValueError(msg)
     return pl_data
 
 
 def fetch_park_factors():
     url = "https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=venue&year=2025&batSide=&stat=index_wOBA&condition=All&rolling=3&parks=mlb"
 
-    response = requests.get(url)
+    response = requests.get(url, timeout=20)
     if response.status_code != 200:
         raise Exception(f"Failed to fetch data: {response.status_code}")
 
@@ -37,8 +38,8 @@ def fetch_park_factors():
     return None
 
 
-def fetch_defensive_stats(YEAR):
-    df_tmp = statcast_fielding.statcast_outs_above_average(year=YEAR, pos="ALL")
+def fetch_defensive_stats(year):
+    df_tmp = statcast_fielding.statcast_outs_above_average(year=year, pos="ALL")
     pdf = pl.from_pandas(df_tmp)
     if pdf.is_empty():
         raise ValueError("No data found for the specified year.")
@@ -46,7 +47,9 @@ def fetch_defensive_stats(YEAR):
 
 
 def fetch_fangraphs_projections(
-    position=None, cookies=config.FANGRAPHS_COOKIES, headers=config.FANGRAPHS_HEADERS,
+    position=None,
+    cookies=config.FANGRAPHS_COOKIES,
+    headers=config.FANGRAPHS_HEADERS,
 ):
     if position not in ["pit", "bat"]:
         raise ValueError("Position must be 'pit' or 'bat'")
@@ -66,6 +69,7 @@ def fetch_fangraphs_projections(
         params=params,
         cookies=cookies,
         headers=headers,
+        timeout=20,
     )
     if response.status_code != 200:
         raise Exception(f"Failed to fetch data: {response.status_code}")

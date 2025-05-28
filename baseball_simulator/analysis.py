@@ -29,10 +29,10 @@ def probability_to_american_odds(probability: float) -> int | None:
             return -99999  # Example for P=1
         return None  # For P=0 or invalid
 
-    if probability < 1e-9:
+    if probability < 1e-9:  # noqa: PLR2004
         return 99999  # Avoid massive odds for tiny probs
 
-    if probability < 0.5:
+    if probability < 0.5:  # noqa: PLR2004
         # Underdog calculation: +odds
         odds = (100 / probability) - 100
     else:
@@ -68,8 +68,8 @@ def calculate_probabilities_and_odds(
 
     """
     if not all_results or num_simulations <= 0:
-        print(
-            "Warning: No simulation results provided or num_simulations is zero. Cannot calculate probabilities.",
+        logger.warning(
+            "No simulation results provided or num_simulations is zero. Cannot calculate probabilities.",
         )
         return None
 
@@ -119,13 +119,18 @@ def calculate_probabilities_and_odds(
                     results_counts[inn_key][team]["HR"][hr_bin] += 1
                 except TypeError:
                     # Handle cases where H/BB/HR might not be numbers if sim failed partially
-                    print(
-                        f"Warning: Invalid data type found for {inn_key}/{team} in a sim result. Skipping entry.",
+                    logger.warning(
+                        "Invalid data type found for %s/%s in a sim result. Skipping entry.",
+                        inn_key,
+                        team,
                     )
                     continue
                 except KeyError as e:
-                    print(
-                        f"Warning: Missing key {e} in {inn_key}/{team}. Skipping entry.",
+                    logger.warning(
+                        "Missing key %s in %s/%s. Skipping entry.",
+                        e,
+                        inn_key,
+                        team,
                     )
                     continue  # Skip this entry if structure is wrong
 
@@ -173,7 +178,7 @@ def calculate_probabilities_and_odds(
 
     # --- Create Polars DataFrame ---
     if not data_for_df:
-        print("Warning: No data processed for DataFrame creation.")
+        logger.warning("No data processed for DataFrame creation.")
         return pl.DataFrame()  # Return empty DataFrame
 
     schema = {
