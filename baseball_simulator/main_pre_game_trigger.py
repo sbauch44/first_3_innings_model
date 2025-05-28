@@ -9,10 +9,13 @@ import model_loader
 import storage
 from simulator import BaseballSimulator
 
+logger = logging.getLogger(__name__)
+
 
 def run_pre_game_simulation(game_pk):
     """
     Runs a pre-game simulation for a given baseball game.
+
     This function performs the following steps:
         1. Loads the predictive model and scaler required for simulation.
         2. Fetches game information, including lineups and pitchers, for the specified game.
@@ -31,7 +34,7 @@ def run_pre_game_simulation(game_pk):
         - Information and error messages regarding the simulation process and any issues encountered.
 
     """
-    logging.info(f"Running pre-game simulation for game_pk: {game_pk}")
+    logger.info("Running pre-game simulation for game_pk: %s", game_pk)
 
     # 1. Load model and scaler (do this once if possible)
     loader = model_loader.ModelLoader()
@@ -47,18 +50,18 @@ def run_pre_game_simulation(game_pk):
     # This might need to be passed in or fetched again based on game_pk
     game_info = data_fetcher.get_game_info(game_pk)
     if not game_info:
-        logging.error(f"Could not get game info for {game_pk}. Aborting.")
+        logger.error("Could not get game info for %s. Aborting.", game_pk)
         return
     lineup_data = data_fetcher.get_batting_orders(game_pk)
     if not lineup_data or not lineup_data.get("home") or not lineup_data.get("away"):
-        logging.error(f"Could not get lineups for {game_pk}. Aborting.")
+        logger.error("Could not get lineups for %s. Aborting.", game_pk)
         return
 
     park_factors_df = storage.load_dataframe("park_factors.parquet")
     player_defense_df = storage.load_dataframe("defensive_stats.parquet")
 
     if park_factors_df is None or player_defense_df is None:
-        logging.error("Required data files are missing. Aborting simulation.")
+        logger.error("Required data files are missing. Aborting simulation.")
         return
 
     # 3. Prepare All Inputs
@@ -74,7 +77,7 @@ def run_pre_game_simulation(game_pk):
     # sim_inputs should contain home_lineup_with_stats, away_lineup_with_stats, etc.
 
     if sim_inputs is None:
-        logging.error("Simulation inputs could not be prepared. Aborting simulation.")
+        logger.error("Simulation inputs could not be prepared. Aborting simulation.")
         return
     # 4. Run Simulation (Many times)
     simulator = BaseballSimulator(
@@ -89,7 +92,7 @@ def run_pre_game_simulation(game_pk):
 
     num_sims = config.NUM_SIMULATIONS
     all_runs_results = []
-    logging.info(f"Starting {num_sims} simulations...")
+    logger.info("Starting %d simulations...", num_sims)
     for _ in range(num_sims):
         run_result = simulator.simulate_first_three_innings(
             home_lineup=sim_inputs["home_lineup_with_stats"],
@@ -99,19 +102,25 @@ def run_pre_game_simulation(game_pk):
             game_context=sim_inputs["game_context"],
         )
         all_runs_results.append(run_result)
-    logging.info("Simulations complete.")
+    logger.info("Simulations complete.")
 
     # 5. Analyze Results to get Probability DataFrame
-    results_df = analysis.calculate_probabilities_and_odds(all_runs_results, num_sims) # Assumes function exists
+    results_df = analysis.calculate_probabilities_and_odds(
+        all_runs_results,
+        num_sims,
+    )  # Assumes function exists
 
     # 6. Store Results
     if results_df is not None:
-        storage.save_simulation_results(results_df, today_str, game_pk) # type: ignore
-        logging.info(f"Results saved for game {game_pk}")
+        storage.save_simulation_results(results_df, today_str, game_pk)  # type: ignore[attr-defined]
+        logger.info("Results saved for game %s", game_pk)
+
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:
-        game_pk_arg = int(sys.argv[1]) # Get game_pk from command line argument/event payload
+        game_pk_arg = int(
+            sys.argv[1],
+        )  # Get game_pk from command line argument/event payload
         run_pre_game_simulation(game_pk_arg)
     else:
-        print("Error: Missing game_pk argument.")
+        logger.error("Error: Missing game_pk argument.")

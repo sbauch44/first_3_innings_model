@@ -1,8 +1,11 @@
 import collections
+import logging
 
 import polars as pl
 
 # --- Helper Functions for Odds Conversion ---
+
+logger = logging.getLogger(__name__)
 
 
 def probability_to_decimal_odds(probability: float) -> float | None:
@@ -37,14 +40,16 @@ def probability_to_american_odds(probability: float) -> int | None:
         odds = -1 * (probability / (1 - probability)) * 100
 
     # Round to nearest integer
-    return int(round(odds))
+    return round(odds)
 
 
 # --- Main Analysis Function ---
 
 
 def calculate_probabilities_and_odds(
-    all_results: list, num_simulations: int, max_bin_val: int = 5,
+    all_results: list,
+    num_simulations: int,
+    max_bin_val: int = 5,
 ):
     """
     Analyzes simulation results to calculate probabilities and odds for
