@@ -530,7 +530,7 @@ class BaseballSimulator:
         """
         all_results = []
         logging.info(f"Running {num_sims} game simulations...")
-        for i in tqdm(range(num_sims)):
+        for _ in tqdm(range(num_sims)):
             sim_result = self.simulate_first_three_innings(
                 home_lineup,
                 away_lineup,
@@ -567,11 +567,6 @@ class BaseballSimulator:
             for team in ["away", "home"]:
                 # Count occurrences for different stats
                 for stat in ["H", "R", "BB", "HR"]:
-                    if (
-                        stat == "HR"
-                    ):  # Special case for HR which might not be tracked directly
-                        continue
-
                     counts = {}
                     for sim_result in all_results:
                         if inning in sim_result and team in sim_result[inning]:
