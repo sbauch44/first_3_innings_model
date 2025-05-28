@@ -316,6 +316,7 @@ def calculate_probabilities_and_odds(
     include_totals: bool = True,
 ):
     """
+
     Analyzes simulation results to calculate probabilities and odds for
     specified statistics per team per inning (0-5+).
 

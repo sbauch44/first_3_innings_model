@@ -26,7 +26,7 @@ def save_dataframe(df: pl.DataFrame, file_name_with_ext: str, sub_path: str = ""
 
         df.write_parquet(full_path_obj)  # Polars write_parquet accepts Path objects
         logger.info("Successfully saved DataFrame to %s", full_path_obj)
-    except AttributeError as ae:
+    except AttributeError:
         logger.exception("Configuration error (e.g., BASE_FILE_PATH not set in config)")
     except Exception as e:
         logger.error(
@@ -57,7 +57,7 @@ def load_dataframe(file_name_with_ext: str, sub_path: str = "") -> pl.DataFrame 
         df_to_load = pl.read_parquet(
             full_path_obj
         )  # Polars read_parquet accepts Path objects
-    except Exception as e:
+    except Exception:
         logger.exception("Error loading DataFrame from %s", full_path_obj)
         return None
     else:
