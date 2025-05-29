@@ -1,3 +1,4 @@
+import numpy as np
 import polars as pl
 
 NUM_SIMULATIONS = 10_000
@@ -118,6 +119,27 @@ LEAGUE_AVG_RATES = {
     "lg_2b_rate_of_hits": 0.179,  # ~17.9% of hits are doubles
     "lg_3b_rate_of_hits": 0.015,  # ~1.5% of hits are triples
 }
+
+# Pre-convert to numpy arrays for faster access in tight loops
+LEAGUE_RATES_ARRAY = {
+    "common_rates": np.array(
+        [
+            LEAGUE_AVG_RATES["rate_1st_to_3rd_on_single"],
+            LEAGUE_AVG_RATES["rate_score_from_1st_on_double"],
+            LEAGUE_AVG_RATES["gidp_rate_if_gb_opportunity"],
+        ]
+    )
+}
+
+# Pre-compute outcome mappings as arrays instead of dicts for faster lookup
+OUTCOME_CODES = np.array([0, 1, 2, 3, 4, 5, 6, 7])
+OUTCOME_LABELS_ARRAY = np.array(
+    ["Out_In_Play", "Single", "Double", "Triple", "HomeRun", "Strikeout", "Walk", "HBP"]
+)
+
+# Memory optimization: Use smaller data types where possible
+CONTINUOUS_COLS_INDICES = None  # Will be set by simulator
+CATEGORICAL_COLS_INDICES = None  # Will be set by simulator
 
 # Ballast Weights (Stabilization Points)
 BALLAST_WEIGHTS = {
@@ -241,6 +263,10 @@ OUTCOME_LABELS = {  # Added example
     6: "Walk",
     7: "HBP",
 }
+
+# Create reverse mapping for fast lookup
+LABEL_TO_CODE = {label: code for code, label in OUTCOME_LABELS.items()}
+
 N_CATEGORIES = len(OUTCOME_LABELS)
 
 # In config.py or passed to prepare_simulation_inputs
