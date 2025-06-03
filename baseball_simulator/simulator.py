@@ -1,6 +1,6 @@
 import logging
 import random
-from typing import Any, Optional
+from typing import Any
 
 import numpy as np
 import polars as pl
@@ -35,6 +35,7 @@ class BaseballSimulator:
             scaler file
 
         """
+
         self.idata = idata
         self.scaler = scaler
 
@@ -125,20 +126,20 @@ class BaseballSimulator:
         continuous_data = input_array[:, continuous_indices]
         categorical_data = input_array[:, categorical_indices]
 
-        # 2. Scale Continuous Features
         try:
             scaled_continuous_data = self.scaler.transform(
                 continuous_data,
             )  # Use transform, NOT fit_transform
         except Exception as e:
-            logger.warning(f"Error scaling data: {e}")
-            logger.warning(f"Input data shape for scaling: {continuous_data.shape}")
-            logger.warning(f"Scaler expects {self.scaler.n_features_in_} features.")
-            raise
+            logger.error(f"Error scaling data: {e}")
+            logger.error(f"Input data shape for scaling: {continuous_data.shape}")
+            logger.error(
+                f"Scaler expects {getattr(self.scaler, 'n_features_in_', 'unknown')} features."
+            )
 
         # 3. Combine Features
         categorical_data = categorical_data.astype(float)
-        X_new = np.concatenate([scaled_continuous_data, categorical_data], axis=1)
+        X_new = np.concatenate([scaled_continuous_data, categorical_data], axis=1)  # type: ignore
 
         n_input_features = X_new.shape[1]  # Number of features in the current input
 
