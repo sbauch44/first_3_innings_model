@@ -53,6 +53,9 @@ class BaseballSimulator:
         # Default league average rates - can be overridden
         self.league_avg_rates = league_avg_rates
 
+        # Create lookup tables for faster base running logic
+        self.base_running_outcomes = self._create_base_running_lookup()
+
         # --- Pre-calculate mean posterior parameters ---
         logger.info(
             "Pre-calculating mean posterior parameters",
@@ -83,6 +86,114 @@ class BaseballSimulator:
             )
             raise
         # --- End of pre-calculation ---
+
+    def _create_base_running_lookup(self):
+        """Create lookup tables for all base running scenarios"""
+        outcomes = {}
+
+        # For each possible base state (8 combinations: 000, 001, 010, etc.)
+        for base_state in range(8):
+            bases = [
+                (base_state >> i) & 1 for i in range(3)
+            ]  # Convert to [1st, 2nd, 3rd]
+
+            outcomes[base_state] = {}
+
+            # Single outcomes
+            outcomes[base_state]["Single"] = self._calculate_single_outcome(bases)
+            outcomes[base_state]["Double"] = self._calculate_double_outcome(bases)
+            outcomes[base_state]["Triple"] = self._calculate_triple_outcome(bases)
+            outcomes[base_state]["HomeRun"] = self._calculate_homerun_outcome(bases)
+            outcomes[base_state]["Walk"] = self._calculate_walk_outcome(bases)
+            outcomes[base_state]["HBP"] = self._calculate_walk_outcome(
+                bases
+            )  # Same as walk
+            outcomes[base_state]["Out_In_Play"] = self._calculate_out_outcome(bases)
+
+        return outcomes
+
+    def _calculate_single_outcome(self, bases):
+        """Calculate outcome for a single given current base state"""
+        runs = 0
+        new_bases = [0, 0, 0]
+
+        # Runners score from 2nd and 3rd
+        if bases[2]:  # Runner on 3rd
+            runs += 1
+        if bases[1]:  # Runner on 2nd
+            runs += 1
+
+        # Runner from 1st - probabilistic advancement
+        if bases[0]:  # Runner on 1st
+            # This needs probabilistic handling during simulation
+            return {
+                "runs_certain": runs,
+                "new_bases": [
+                    1,
+                    0,
+                    0,
+                ],  # Batter to 1st, runner advancement handled separately
+                "runner_1st_options": True,  # Flag for probabilistic handling
+            }
+        else:
+            new_bases[0] = 1  # Batter to 1st
+            return {"runs": runs, "new_bases": new_bases}
+
+    def _calculate_double_outcome(self, bases):
+        """Calculate outcome for a double given current base state"""
+        runs = 0
+        new_bases = [0, 1, 0]  # Batter to 2nd
+
+        # Runners from 2nd and 3rd score automatically
+        if bases[2]:  # Runner from 3rd scores
+            runs += 1
+        if bases[1]:  # Runner from 2nd scores
+            runs += 1
+
+        # Runner from 1st - probabilistic scoring
+        if bases[0]:
+            return {
+                "runs_certain": runs,
+                "new_bases": new_bases,
+                "runner_1st_scores": True,  # Flag for probabilistic handling
+            }
+
+        return {"runs": runs, "new_bases": new_bases}
+
+    def _calculate_triple_outcome(self, bases):
+        """Calculate outcome for a triple"""
+        runs = sum(bases)  # All runners score
+        new_bases = [0, 0, 1]  # Batter to 3rd
+        return {"runs": runs, "new_bases": new_bases}
+
+    def _calculate_homerun_outcome(self, bases):
+        """Calculate outcome for a home run"""
+        runs = sum(bases) + 1  # All runners score plus batter
+        new_bases = [0, 0, 0]  # Bases empty
+        return {"runs": runs, "new_bases": new_bases}
+
+    def _calculate_walk_outcome(self, bases):
+        """Calculate outcome for a walk/HBP"""
+        runs = 0
+        new_bases = list(bases)
+
+        # Force advancement logic
+        if bases[0]:  # Runner on 1st
+            if bases[1]:  # Runner on 2nd
+                if bases[2]:  # Bases loaded - runner scores
+                    runs += 1
+                else:
+                    new_bases[2] = 1  # Runner to 3rd
+            else:
+                new_bases[1] = 1  # Runner to 2nd
+
+        new_bases[0] = 1  # Batter to 1st
+        return {"runs": runs, "new_bases": new_bases}
+
+    def _calculate_out_outcome(self, bases):
+        """Calculate outcome for an out in play (simplified)"""
+        # This is complex due to GIDP - return base case
+        return {"runs": 0, "new_bases": bases, "requires_gidp_check": True}
 
     def set_league_avg_rates(self, rates_dict: dict[str, float]) -> None:
         """
@@ -317,7 +428,10 @@ class BaseballSimulator:
             # Update current batter index from pre-calculated batch
             current_batter_idx = batter_indices_batch[pa_count]
 
-            # Rest of the outcome processing logic remains the same
+            bases_key = (
+                bases[0] + bases[1] * 2 + bases[2] * 4
+            )  # Convert [1st, 2nd, 3rd] to 0-7
+
             new_bases = list(bases)
             runs_this_pa = 0
             pa_hit = 0
@@ -327,97 +441,85 @@ class BaseballSimulator:
 
             if outcome_label == "Strikeout":
                 outs += 1
-            elif outcome_label == "Walk":
-                pa_walk += 1
-                if bases[0] == 1:
-                    if bases[1] == 1:
-                        if bases[2] == 1:
-                            runs_this_pa += 1
-                        new_bases[2] = 1
-                    new_bases[1] = 1
-                new_bases[0] = 1
-            elif outcome_label == "HBP":
-                if bases[0] == 1:
-                    if bases[1] == 1:
-                        if bases[2] == 1:
-                            runs_this_pa += 1
-                        new_bases[2] = 1
-                    new_bases[1] = 1
-                new_bases[0] = 1
+
+            elif outcome_label in ["Walk", "HBP"]:
+                if outcome_label == "Walk":
+                    pa_walk += 1
+
+                # Use lookup table
+                outcome_data = self.base_running_outcomes[bases_key]["Walk"]
+                runs_this_pa = outcome_data["runs"]
+                new_bases = outcome_data["new_bases"].copy()
+
             elif outcome_label == "Single":
                 pa_hit += 1
-                runner_3b_scores = bases[2] == 1
-                runner_2b_scores = bases[1] == 1
-                runner_1b_to_3rd = False
-                runner_1b_to_2nd = False
+                outcome_data = self.base_running_outcomes[bases_key]["Single"]
 
-                if runner_3b_scores:
-                    runs_this_pa += 1
-                if runner_2b_scores:
-                    runs_this_pa += 1
+                if "runner_1st_options" in outcome_data:
+                    # Handle probabilistic 1st base runner advancement
+                    runs_this_pa = outcome_data["runs_certain"]
+                    new_bases = outcome_data["new_bases"].copy()
 
-                if bases[0] == 1:
+                    # Use random number for 1st to 3rd decision
                     if (
-                        random.random()
+                        np.random.random()
                         < self.league_avg_rates["rate_1st_to_3rd_on_single"]
                     ):
-                        runner_1b_to_3rd = True
+                        new_bases[2] = 1  # Runner to 3rd
                     else:
-                        runner_1b_to_2nd = True
-
-                new_bases = [0, 0, 0]
-                if runner_1b_to_3rd:
-                    new_bases[2] = 1
-                elif runner_2b_scores == False and bases[1] == 1:
-                    new_bases[2] = 1
-                if runner_1b_to_2nd:
-                    new_bases[1] = 1
-                new_bases[0] = 1
+                        new_bases[1] = 1  # Runner to 2nd
+                else:
+                    runs_this_pa = outcome_data["runs"]
+                    new_bases = outcome_data["new_bases"].copy()
 
             elif outcome_label == "Double":
                 pa_hit += 1
-                runner_3b_scores = bases[2] == 1
-                runner_2b_scores = bases[1] == 1
-                runner_1b_to_3rd = False
+                outcome_data = self.base_running_outcomes[bases_key]["Double"]
 
-                if runner_3b_scores:
-                    runs_this_pa += 1
-                if runner_2b_scores:
-                    runs_this_pa += 1
-                if bases[0] == 1:
+                if "runner_1st_scores" in outcome_data:
+                    # Handle probabilistic scoring from 1st
+                    runs_this_pa = outcome_data["runs_certain"]
+                    new_bases = outcome_data["new_bases"].copy()
+
+                    # Use random number for scoring from 1st
                     if (
-                        random.random()
+                        np.random.random()
                         < self.league_avg_rates["rate_score_from_1st_on_double"]
                     ):
-                        runs_this_pa += 1
+                        runs_this_pa += 1  # Runner scores
                     else:
-                        runner_1b_to_3rd = True
-
-                new_bases = [0, 0, 1]  # Batter to 2nd
-                if runner_1b_to_3rd:
-                    new_bases[2] = 1
+                        new_bases[2] = 1  # Runner to 3rd
+                else:
+                    runs_this_pa = outcome_data["runs"]
+                    new_bases = outcome_data["new_bases"].copy()
 
             elif outcome_label == "Triple":
                 pa_hit += 1
-                runs_this_pa += sum(bases)
-                new_bases = [0, 0, 1]
+                outcome_data = self.base_running_outcomes[bases_key]["Triple"]
+                runs_this_pa = outcome_data["runs"]
+                new_bases = outcome_data["new_bases"].copy()
 
             elif outcome_label == "HomeRun":
                 pa_hit += 1
                 pa_hr += 1
-                runs_this_pa += 1 + sum(bases)
-                new_bases = [0, 0, 0]
+                outcome_data = self.base_running_outcomes[bases_key]["HomeRun"]
+                runs_this_pa = outcome_data["runs"]
+                new_bases = outcome_data["new_bases"].copy()
 
             elif outcome_label == "Out_In_Play":
                 outs += 1
+
+                # GIDP logic still needs to be handled specially due to complexity
                 is_gidp_opportunity = bases[0] == 1 and outs_before_pa < 2
                 adjusted_gidp_rate = self.league_avg_rates.get(
                     "gidp_effective_rate", 0.065
                 )
 
-                if is_gidp_opportunity and random.random() < adjusted_gidp_rate:
+                if is_gidp_opportunity and np.random.random() < adjusted_gidp_rate:
                     if outs < 3:
-                        outs += 1
+                        outs += 1  # Double play
+
+                    # GIDP base running (keep existing logic for now)
                     runner_3b_holds = bases[2] == 1
                     runner_2b_to_3rd = bases[1] == 1
                     new_bases = [0, 0, 0]
@@ -426,6 +528,7 @@ class BaseballSimulator:
                     if runner_3b_holds and not runner_2b_to_3rd:
                         new_bases[2] = 1
                 else:
+                    # Regular out - advance runners if forced
                     runner_3b_holds = bases[2] == 1
                     runner_2b_to_3rd = bases[1] == 1
                     runner_1b_to_2nd = bases[0] == 1
