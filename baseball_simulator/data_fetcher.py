@@ -12,8 +12,16 @@ from pybaseball import (
 )
 
 
-def fetch_statcast_data():
-    data = statcast(verbose=True)
+def fetch_statcast_data(start_date=None, end_date=None):
+    """
+    Fetch statcast data for a date range.
+    If no dates provided, gets recent data (current behavior).
+    """
+    if start_date and end_date:
+        data = statcast(start_dt=start_date, end_dt=end_date, verbose=True)
+    else:
+        data = statcast(verbose=True)  # Current behavior - gets recent data
+
     pl_data = pl.from_pandas(data)
     if pl_data.is_empty():
         msg = "No data found in the response."
