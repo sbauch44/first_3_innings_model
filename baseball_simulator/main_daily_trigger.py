@@ -1,30 +1,31 @@
 import logging
-
-# import scheduler_service # Hypothetical module to interact with AWS EventBridge etc.
+import subprocess
+import sys
 from datetime import date, datetime, timedelta
+from pathlib import Path
 
 import config
 import data_fetcher
 import data_processor
 import polars as pl
-import pytz  # For timezone handling
+import pytz
 import statsapi
+from apscheduler.executors.pool import ThreadPoolExecutor
+from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
+from apscheduler.schedulers.blocking import BlockingScheduler
 
 # --- Configure Logging ---
-# Configure once at the start of your script execution
 logging.basicConfig(
-    level=logging.INFO,  # Set the minimum level of messages to log (DEBUG, INFO, WARNING, ERROR, CRITICAL)
-    format="%(asctime)s - %(levelname)s - %(message)s",  # Define log message format
-    datefmt="%Y-%m-%d %H:%M:%S",  # Define date/time format
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
 )
 logger = logging.getLogger(__name__)
 
 
 def run_incremental_update_and_feature_recalc():
     """
-    Fetches yesterday's data, processes it, unions with historical data,
-    and recalculates all rolling ballasted stats.
-    Saves the updated historical data and the calculated rolling stats.
+    Your existing function - keeping it unchanged
     """
     logger.info("--- Starting Incremental Update and Feature Recalculation ---")
 
@@ -37,14 +38,13 @@ def run_incremental_update_and_feature_recalc():
         df_new_raw = data_fetcher.fetch_statcast_data()
         if df_new_raw is None or df_new_raw.is_empty():
             logger.info("No new Statcast data found for yesterday.")
-            return True  # Indicate success even if no new data
+            return True
         logger.info(f"Fetched {df_new_raw.shape[0]} new raw rows.")
     except Exception as e:
         logger.error(
-            f"Error fetching Statcast data for {yesterday_str}: {e}",
-            exc_info=True,
-        )  # Log error with traceback
-        return False  # Indicate failure
+            f"Error fetching Statcast data for {yesterday_str}: {e}", exc_info=True
+        )
+        return False
 
     # Process the new data
     logger.info("Processing new Statcast data...")
@@ -64,7 +64,7 @@ def run_incremental_update_and_feature_recalc():
     try:
         df_historical_pa_helpers = pl.read_parquet(historical_pa_helpers_path)
         logger.info(
-            f"Loaded {df_historical_pa_helpers.shape[0]} historical PA records.",
+            f"Loaded {df_historical_pa_helpers.shape[0]} historical PA records."
         )
         # --- 3. Union New Data with Historical ---
         df_pa_full_updated = pl.concat(
@@ -73,47 +73,43 @@ def run_incremental_update_and_feature_recalc():
         ).unique(subset=["game_pk", "at_bat_number"])
     except Exception as e:
         logger.warning(f"Could not load historical data (may be first run): {e}")
-        df_pa_full_updated = (
-            df_new_pa_helpers  # Start fresh if historical doesn't exist
-        )
+        df_pa_full_updated = df_new_pa_helpers
 
     logger.info(f"Total combined PA records: {df_pa_full_updated.shape[0]}")
     if df_pa_full_updated.is_empty():
         logger.warning("Combined PA DataFrame is empty, stopping update.")
-        return True  # Return True to allow scheduling to proceed, but log warning
+        return True
 
     # --- 4. Save Updated Combined PA Data (with helpers) ---
     try:
         logger.info(
-            f"Saving updated historical PA data to: {historical_pa_helpers_path}",
+            f"Saving updated historical PA data to: {historical_pa_helpers_path}"
         )
         df_pa_full_updated.write_parquet(historical_pa_helpers_path)
     except Exception as e:
         logger.error(f"Error saving updated historical PA data: {e}", exc_info=True)
-        return False  # Indicate failure
+        return False
 
     # --- 5. Load Pre-Calculated League Averages (from 2021-2022) ---
-    # Assumes they are stored in config.LEAGUE_AVG_RATES dictionary
     league_averages_2122 = config.LEAGUE_AVG_RATES
     logger.info("Using pre-calculated 2021-2022 league averages for ballast.")
 
     # --- 6. Recalculate Rolling Ballasted Stats on FULL Updated Dataset ---
-    # This is the computationally intensive part that runs daily
     try:
         logger.info("Recalculating daily aggregates...")
         df_batter_daily = data_processor.calculate_batter_daily_totals(
-            df_pa_full_updated,
+            df_pa_full_updated
         )
         df_pitcher_daily = data_processor.calculate_pitcher_daily_totals(
-            df_pa_full_updated,
+            df_pa_full_updated
         )
 
         logger.info("Recalculating cumulative stats...")
         df_batter_daily = data_processor.calculate_cumulative_batter_stats(
-            df_batter_daily,
+            df_batter_daily
         )
         df_pitcher_daily = data_processor.calculate_cumulative_pitcher_stats(
-            df_pitcher_daily,
+            df_pitcher_daily
         )
 
         logger.info("Applying ballast and calculating final rolling stats...")
@@ -136,27 +132,20 @@ def run_incremental_update_and_feature_recalc():
         logger.info("selecting relevant batter and pitcher columns...")
         batter_cols = data_processor.get_cols_to_join(df_batter_daily_final, "batter")
         pitcher_cols = data_processor.get_cols_to_join(
-            df_pitcher_daily_final,
-            "pitcher",
+            df_pitcher_daily_final, "pitcher"
         )
 
         logger.info("filtering dataframe to only include relevant columns...")
         batter_stats_to_join = data_processor.select_subset_of_cols(
-            df_batter_daily_final,
-            "batter",
-            batter_cols,
+            df_batter_daily_final, "batter", batter_cols
         )
         pitcher_stats_to_join = data_processor.select_subset_of_cols(
-            df_pitcher_daily_final,
-            "pitcher",
-            pitcher_cols,
+            df_pitcher_daily_final, "pitcher", pitcher_cols
         )
 
         logger.info("Joining daily stats back to the original dataframe...")
         main_df = data_processor.join_together_final_df(
-            df_pa_full_updated,
-            batter_stats_to_join,
-            pitcher_stats_to_join,
+            df_pa_full_updated, batter_stats_to_join, pitcher_stats_to_join
         )
     except Exception as e:
         logger.error(f"Error during joining daily stats: {e}", exc_info=True)
@@ -164,13 +153,12 @@ def run_incremental_update_and_feature_recalc():
 
     # --- 8. Save the Final Daily Stats ---
     final_stats_path = f"{config.BASE_FILE_PATH}daily_stats_final.parquet"
-
     try:
         logger.info(f"Saving calculated daily batter stats to: {final_stats_path}")
         main_df.write_parquet(final_stats_path)
     except Exception as e:
         logger.error(f"Error saving calculated daily stats: {e}", exc_info=True)
-        return False  # Indicate failure
+        return False
 
     # --- 9. Fetch Park Factors ---
     try:
@@ -178,14 +166,13 @@ def run_incremental_update_and_feature_recalc():
         park_factors_df = data_fetcher.fetch_park_factors()
         if park_factors_df is None or park_factors_df.is_empty():
             logger.info("No new park factors data found for yesterday.")
-            return True  # Indicate success even if no new data
+            return True
         logger.info(f"Fetched {park_factors_df.shape[0]} new raw rows.")
     except Exception as e:
         logger.error(
-            f"Error fetching park factors data for {yesterday_str}: {e}",
-            exc_info=True,
-        )  # Log error with traceback
-        return False  # Indicate failure
+            f"Error fetching park factors data for {yesterday_str}: {e}", exc_info=True
+        )
+        return False
 
     # --- 10. Transform and Save Park Factors ---
     final_park_factors_path = f"{config.BASE_FILE_PATH}park_factors.parquet"
@@ -193,7 +180,7 @@ def run_incremental_update_and_feature_recalc():
         logger.info("Transforming park factors data...")
         park_factors_df = data_processor.calculate_park_factors(park_factors_df)
         logger.info(
-            f"Saving transformed park factors data to: {final_park_factors_path}",
+            f"Saving transformed park factors data to: {final_park_factors_path}"
         )
         park_factors_df.write_parquet(final_park_factors_path)
     except Exception as e:
@@ -207,7 +194,7 @@ def run_incremental_update_and_feature_recalc():
         defensive_stats_df = data_fetcher.fetch_defensive_stats(config.END_YEAR)
         if defensive_stats_df is None or defensive_stats_df.is_empty():
             logger.info("No new defensive stats data found for yesterday.")
-            return True  # Indicate success even if no new data
+            return True
         logger.info(f"Fetched {defensive_stats_df.shape[0]} new raw rows.")
     except Exception as e:
         logger.error(
@@ -219,21 +206,19 @@ def run_incremental_update_and_feature_recalc():
     final_defensive_stats_path = f"{config.BASE_FILE_PATH}defensive_stats.parquet"
     if defensive_stats_df is None:
         logger.warning(
-            "No defensive stats DataFrame to process. Skipping transformation and save.",
+            "No defensive stats DataFrame to process. Skipping transformation and save."
         )
         return True
     try:
         logger.info("Transforming defensive stats data...")
         defensive_total_innings = data_processor.calculate_defensive_innings_played(
-            df_pa_full_updated,
+            df_pa_full_updated
         )
         final_defensive_stats = data_processor.calculate_cumulative_defensive_stats(
-            defensive_stats_df,
-            defensive_total_innings,
+            defensive_stats_df, defensive_total_innings
         )
-
         logger.info(
-            f"Saving transformed defensive stats data to: {final_defensive_stats_path}",
+            f"Saving transformed defensive stats data to: {final_defensive_stats_path}"
         )
         final_defensive_stats.write_parquet(final_defensive_stats_path)
     except Exception as e:
@@ -246,16 +231,13 @@ def run_incremental_update_and_feature_recalc():
         fangraphs_bat_proj_df = data_fetcher.fetch_fangraphs_projections("bat")
         if fangraphs_bat_proj_df is None or fangraphs_bat_proj_df.is_empty():
             logger.info("No new Fangraphs batter projections data found.")
-            return True  # Indicate success even if no new data
+            return True
         logger.info(
-            f"Fetched {fangraphs_bat_proj_df.shape[0]} new Fangraphs batter projections.",
+            f"Fetched {fangraphs_bat_proj_df.shape[0]} new Fangraphs batter projections."
         )
     except Exception as e:
-        logger.error(
-            f"Error fetching Fangraphs batter projections: {e}",
-            exc_info=True,
-        )
-        return False  # Indicate failure
+        logger.error(f"Error fetching Fangraphs batter projections: {e}", exc_info=True)
+        return False
 
     try:
         logger.info("Transforming Fangraphs pitching projections data...")
@@ -264,12 +246,11 @@ def run_incremental_update_and_feature_recalc():
             logger.info("No new Fangraphs pitching projections data found.")
             return True
         logger.info(
-            f"Fetched {fangraphs_pit_proj_df.shape[0]} new Fangraphs pitching projections.",
+            f"Fetched {fangraphs_pit_proj_df.shape[0]} new Fangraphs pitching projections."
         )
     except Exception as e:
         logger.error(
-            f"Error fetching Fangraphs pitching projections: {e}",
-            exc_info=True,
+            f"Error fetching Fangraphs pitching projections: {e}", exc_info=True
         )
         return False
 
@@ -279,10 +260,10 @@ def run_incremental_update_and_feature_recalc():
     )
     try:
         logger.info(
-            f"Saving fangraphs batter projections to: {final_bat_projections_path}",
+            f"Saving fangraphs batter projections to: {final_bat_projections_path}"
         )
         formatted_bat_projections = data_processor.process_fangraphs_batter_projections(
-            fangraphs_bat_proj_df,
+            fangraphs_bat_proj_df
         )
         formatted_bat_projections.write_parquet(final_bat_projections_path)
     except Exception as e:
@@ -294,13 +275,11 @@ def run_incremental_update_and_feature_recalc():
     )
     try:
         logger.info(
-            "Saving fangraphs pitcher projections to: %s",
-            final_pit_projections_path,
+            "Saving fangraphs pitcher projections to: %s", final_pit_projections_path
         )
         formatted_pit_projections = (
             data_processor.process_fangraphs_pitcher_projections(
-                fangraphs_pit_proj_df,
-                use_advanced_imputation=True,  # Start with simple method
+                fangraphs_pit_proj_df, use_advanced_imputation=True
             )
         )
         formatted_pit_projections.write_parquet(final_pit_projections_path)
@@ -309,127 +288,298 @@ def run_incremental_update_and_feature_recalc():
         return False
 
     logger.info("--- Incremental Update and Feature Recalculation Complete ---")
-    return True  # Indicate success
+    return True
 
 
-def run_daily_scheduling():
-    """Fetches today's schedule and schedules the pre-game simulation triggers."""
-    logger.info("\n--- Starting Daily Scheduling ---")
+def create_windows_scheduled_tasks_for_games():
+    """
+    Create individual Windows scheduled tasks for each game instead of using APScheduler
+    This approach is more reliable on Windows
+    """
+    logger.info("--- Creating Windows Scheduled Tasks for Today's Games ---")
+
     today = date.today()
     today_str = today.strftime("%Y-%m-%d")
 
-    # 1. Get Daily Schedule
     try:
-        # Fetch schedule using statsapi or your chosen method
+        # Get today's schedule
         schedule = statsapi.schedule(date=today_str, sportId=1)
         if not schedule:
             logger.info("No games scheduled for today.")
-            return
-        logger.info("Found %d games.", len(schedule))
-    except Exception as e:
-        logger.error(f"Error fetching schedule from statsapi: {e}", exc_info=True)
-        return
+            return True
 
-    # 2. Schedule Per-Game Triggers
-    logger.info("Scheduling pre-game triggers...")
-    scheduled_count = 0
-    skipped_count = 0
-    for game in schedule:
+        logger.info(f"Found {len(schedule)} games.")
+
+        # Get paths
+        script_dir = Path(__file__).parent.absolute()
+        python_exe = sys.executable
+        pre_game_script = script_dir / "main_pre_game_trigger.py"
+
+        scheduled_count = 0
+        skipped_count = 0
+
+        for game in schedule:
+            try:
+                game_pk = game.get("game_id")
+                game_start_str = game.get("game_datetime")
+                status = game.get("status", "Unknown").lower()
+
+                # Validation
+                if not game_pk or not game_start_str:
+                    logger.warning(f"Skipping game due to missing data: {game}")
+                    skipped_count += 1
+                    continue
+
+                if any(
+                    word in status
+                    for word in ["tbd", "postponed", "cancelled", "suspended"]
+                ):
+                    logger.info(f"Skipping game {game_pk} due to status: {status}")
+                    skipped_count += 1
+                    continue
+
+                # Calculate trigger time
+                game_start_utc = datetime.fromisoformat(game_start_str)
+                if game_start_utc.tzinfo is None:
+                    game_start_utc = pytz.utc.localize(game_start_utc)
+
+                # Convert to local time for Windows Task Scheduler
+                local_tz = pytz.timezone("America/New_York")  # Adjust to your timezone
+                game_start_local = game_start_utc.astimezone(local_tz)
+                trigger_time_local = game_start_local - timedelta(minutes=55)
+
+                # Don't schedule in the past
+                if trigger_time_local < datetime.now(local_tz):
+                    logger.info(
+                        f"Skipping game {game_pk} - trigger time is in the past"
+                    )
+                    skipped_count += 1
+                    continue
+
+                # Create Windows scheduled task
+                task_name = f"BaseballPreGame_{game_pk}_{today_str.replace('-', '')}"
+
+                # Format time for schtasks (HH:MM format)
+                trigger_time_str = trigger_time_local.strftime("%H:%M")
+                trigger_date_str = trigger_time_local.strftime("%m/%d/%Y")
+
+                # Build schtasks command
+                schtasks_cmd = [
+                    "schtasks",
+                    "/create",
+                    "/tn",
+                    task_name,
+                    "/tr",
+                    f'"{python_exe}" "{pre_game_script}" {game_pk}',
+                    "/sc",
+                    "once",
+                    "/st",
+                    trigger_time_str,
+                    "/sd",
+                    trigger_date_str,
+                    "/f",  # Force overwrite if exists
+                    "/rl",
+                    "highest",  # Run with highest privileges
+                ]
+
+                # Execute the schtasks command
+                try:
+                    result = subprocess.run(
+                        schtasks_cmd, capture_output=True, text=True, check=True
+                    )
+                    logger.info(
+                        f"✅ Scheduled Windows task for game {game_pk} at {trigger_time_local}"
+                    )
+                    if result.stdout.strip():
+                        logger.debug(f"schtasks output: {result.stdout.strip()}")
+                    scheduled_count += 1
+
+                    # Also schedule task deletion (cleanup after 6 hours)
+                    cleanup_time = trigger_time_local + timedelta(hours=6)
+                    cleanup_task_name = f"Cleanup_{task_name}"
+                    cleanup_time_str = cleanup_time.strftime("%H:%M")
+                    cleanup_date_str = cleanup_time.strftime("%m/%d/%Y")
+
+                    # Create a simple cleanup batch script
+                    cleanup_script_path = script_dir / "cleanup_temp.bat"
+                    cleanup_script_path.write_text(
+                        f'schtasks /delete /tn "{task_name}" /f\n'
+                        f'schtasks /delete /tn "{cleanup_task_name}" /f\n'
+                        f'del "{cleanup_script_path}"\n'
+                    )
+
+                    cleanup_cmd = [
+                        "schtasks",
+                        "/create",
+                        "/tn",
+                        cleanup_task_name,
+                        "/tr",
+                        f'"{cleanup_script_path}"',
+                        "/sc",
+                        "once",
+                        "/st",
+                        cleanup_time_str,
+                        "/sd",
+                        cleanup_date_str,
+                        "/f",
+                    ]
+
+                    subprocess.run(cleanup_cmd, capture_output=True, text=True)
+                    logger.debug(f"Scheduled cleanup for task {task_name}")
+
+                except subprocess.CalledProcessError as e:
+                    logger.error(f"Failed to create scheduled task for game {game_pk}")
+                    logger.error(f"Command: {' '.join(schtasks_cmd)}")
+                    if e.stdout:
+                        logger.error(f"stdout: {e.stdout}")
+                    if e.stderr:
+                        logger.error(f"stderr: {e.stderr}")
+                    skipped_count += 1
+                except Exception as e:
+                    logger.error(
+                        f"Error creating scheduled task for game {game_pk}: {e}"
+                    )
+                    skipped_count += 1
+
+            except Exception as e:
+                logger.error(f"Error processing game {game.get('game_id', 'N/A')}: {e}")
+                skipped_count += 1
+
+        logger.info(
+            f"Successfully scheduled {scheduled_count} games, skipped {skipped_count}"
+        )
+
+    except Exception as e:
+        logger.error(f"Error in Windows task scheduling: {e}", exc_info=True)
+        return False
+
+    return True
+
+
+def run_daily_scheduling_apscheduler_windows():
+    """
+    Windows-compatible version that doesn't keep the process alive too long
+    """
+    logger.info("--- Starting Daily Scheduling (Windows Mode) ---")
+
+    # Configure scheduler for shorter runs
+    jobstores = {"default": SQLAlchemyJobStore(url="sqlite:///scheduler_jobs.sqlite")}
+    executors = {"default": ThreadPoolExecutor(5)}
+    job_defaults = {"coalesce": False, "max_instances": 2, "misfire_grace_time": 300}
+
+    scheduler = BlockingScheduler(
+        jobstores=jobstores,
+        executors=executors,
+        job_defaults=job_defaults,
+        timezone=pytz.utc,
+    )
+
+    def run_pre_game_simulation(game_pk):
+        """Execute pre-game simulation"""
         try:
+            logger.info(f"Starting pre-game simulation for game {game_pk}")
+            script_dir = Path(__file__).parent.absolute()
+            simulation_script = script_dir / "main_pre_game_trigger.py"
+
+            result = subprocess.run(
+                [sys.executable, simulation_script, str(game_pk)],
+                capture_output=True,
+                text=True,
+                cwd=script_dir,
+                timeout=1800,
+            )
+
+            if result.returncode == 0:
+                logger.info(f"Pre-game simulation completed for game {game_pk}")
+            else:
+                logger.error(
+                    f"Pre-game simulation failed for game {game_pk}: {result.stderr}"
+                )
+
+        except Exception as e:
+            logger.error(f"Error in pre-game simulation for game {game_pk}: {e}")
+
+    try:
+        today = date.today()
+        today_str = today.strftime("%Y-%m-%d")
+        schedule = statsapi.schedule(date=today_str, sportId=1)
+
+        if not schedule:
+            logger.info("No games scheduled for today.")
+            return True
+
+        scheduled_count = 0
+
+        for game in schedule:
             game_pk = game.get("game_id")
             game_start_str = game.get("game_datetime")
             status = game.get("status", "Unknown").lower()
 
-            # Basic validation
-            if not game_pk or not game_start_str or not isinstance(game_pk, int):
-                logger.warning(
-                    "  Skipping game due to missing pk or start time: %s",
-                    game,
-                )
-                skipped_count += 1
+            if not game_pk or not game_start_str:
                 continue
-            if (
-                "tbd" in status
-                or "postponed" in status
-                or "cancelled" in status
-                or "suspended" in status
+            if any(
+                word in status
+                for word in ["tbd", "postponed", "cancelled", "suspended"]
             ):
-                logger.info("  Skipping game %s due to status: %s", game_pk, status)
-                skipped_count += 1
                 continue
 
-            # Convert to datetime and calculate trigger time
-            # Ensure timezone awareness - assumes fetched time is UTC ('Z')
-            # Game start time is already in UTC
             game_start_utc = datetime.fromisoformat(game_start_str)
             if game_start_utc.tzinfo is None:
                 game_start_utc = pytz.utc.localize(game_start_utc)
             trigger_time_utc = game_start_utc - timedelta(minutes=55)
 
-            # Don't schedule tasks in the past
             if trigger_time_utc < datetime.now(pytz.utc):
-                logger.info(
-                    "Skipping game %s - Trigger time %s is in the past.",
-                    game_pk,
-                    trigger_time_utc,
-                )
-                skipped_count += 1
                 continue
 
+            # Only schedule games for the next 8 hours to avoid long-running process
+            hours_until_game = (
+                trigger_time_utc - datetime.now(pytz.utc)
+            ).total_seconds() / 3600
+            if hours_until_game <= 8:
+                job_id = f"pregame_{game_pk}"
+                scheduler.add_job(
+                    func=run_pre_game_simulation,
+                    trigger="date",
+                    run_date=trigger_time_utc,
+                    args=[game_pk],
+                    id=job_id,
+                    replace_existing=True,
+                )
+                scheduled_count += 1
+                logger.info(f"Scheduled game {game_pk} for {trigger_time_utc} UTC")
+
+        if scheduled_count > 0:
             logger.info(
-                "Scheduling trigger for game %s at %s UTC",
-                game_pk,
-                trigger_time_utc,
+                f"Starting scheduler for {scheduled_count} games in the next 8 hours"
             )
-            scheduled_count += 1
+            # Run scheduler but only for a limited time
+            try:
+                scheduler.start()
+            except KeyboardInterrupt:
+                logger.info("Scheduler interrupted")
+        else:
+            logger.info("No games to schedule in the next 8 hours")
 
-            # --- Replace with actual scheduling service call (e.g., AWS EventBridge put_rule/schedule) ---
-            # Example hypothetical call:
-            # success = scheduler_service.schedule_pre_game_task(
-            #     schedule_time=trigger_time_utc,
-            #     game_pk=game_pk,
-            #     target_arn=config.PRE_GAME_TARGET_ARN
-            # )
-            # if not success:
-            #    logging.error(f"   Failed to schedule trigger for game {game_pk}")
-            #    scheduled_count -= 1 # Decrement if failed
-            # --------------------------------------------------------------------------------------
+    except Exception as e:
+        logger.error(f"Error in APScheduler: {e}", exc_info=True)
 
-        except Exception:
-            logger.exception(
-                "Error processing/scheduling game %s",
-                game.get("game_id", "N/A"),
-            )
-            skipped_count += 1
-
-    logger.info(
-        "Attempted to schedule triggers for %d games. Skipped %d games.",
-        scheduled_count,
-        skipped_count,
-    )
-    logger.info("\n--- Daily Scheduling Complete ---")
+    return True
 
 
-# --- Main Execution Block ---
+# Main execution
 if __name__ == "__main__":
-    # Configure logging when script starts
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s - %(levelname)s - %(module)s - %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-    )
+    logger.info(f"Starting daily process at {datetime.now(tz=pytz.utc)}...")
 
-    logger.info("Starting daily process at %s...", datetime.now(tz=pytz.utc))
+    # Choose your preferred method:
 
-    # Step 1: Update historical data and recalculate features
+    # Method 1: Update data then use Windows scheduled tasks (RECOMMENDED for Windows)
     update_success = run_incremental_update_and_feature_recalc()
-
-    # Step 2: If update was successful, schedule today's tasks
     if update_success:
-        run_daily_scheduling()
-    else:
-        logger.error(
-            "Halting daily process due to error during data update/recalculation.",
-        )
+        create_windows_scheduled_tasks_for_games()  # Use this for Windows
 
-    logger.info("Daily process finished at %s.", datetime.now(tz=pytz.utc))
+    # Method 2: Update data then use APScheduler for near-term games only
+    # update_success = run_incremental_update_and_feature_recalc()
+    # if update_success:
+    #     run_daily_scheduling_apscheduler_windows()  # Alternative approach
+
+    logger.info(f"Daily process finished at {datetime.now(tz=pytz.utc)}.")
