@@ -370,7 +370,7 @@ def create_windows_scheduled_tasks_for_games():
                     "/tn",
                     task_name,
                     "/tr",
-                    f'"{python_exe}" "{pre_game_script}" {game_pk}',
+                    f'"{python_exe} {pre_game_script} {game_pk}"',
                     "/sc",
                     "once",
                     "/st",
@@ -380,6 +380,8 @@ def create_windows_scheduled_tasks_for_games():
                     "/f",  # Force overwrite if exists
                     "/rl",
                     "highest",  # Run with highest privileges
+                    "/ru",
+                    "SYSTEM",  # ← This was missing!
                 ]
 
                 # Execute the schtasks command
