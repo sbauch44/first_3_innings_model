@@ -370,7 +370,7 @@ def create_windows_scheduled_tasks_for_games():
                     "/tn",
                     task_name,
                     "/tr",
-                    f'"{python_exe} {pre_game_script} {game_pk}"',
+                    f'"{python_exe}" "{pre_game_script}" {game_pk}',
                     "/sc",
                     "once",
                     "/st",
@@ -380,8 +380,6 @@ def create_windows_scheduled_tasks_for_games():
                     "/f",  # Force overwrite if exists
                     "/rl",
                     "highest",  # Run with highest privileges
-                    "/ru",
-                    "SYSTEM",  # ← This was missing!
                 ]
 
                 # Execute the schtasks command
@@ -392,6 +390,7 @@ def create_windows_scheduled_tasks_for_games():
                     logger.info(
                         f"✅ Scheduled Windows task for game {game_pk} at {trigger_time_local}"
                     )
+                    # Log schtasks output if there are any messages
                     if result.stdout.strip():
                         logger.debug(f"schtasks output: {result.stdout.strip()}")
                     scheduled_count += 1
@@ -426,8 +425,15 @@ def create_windows_scheduled_tasks_for_games():
                         "/f",
                     ]
 
-                    subprocess.run(cleanup_cmd, capture_output=True, text=True)
-                    logger.debug(f"Scheduled cleanup for task {task_name}")
+                    cleanup_result = subprocess.run(
+                        cleanup_cmd, capture_output=True, text=True
+                    )
+                    if cleanup_result.returncode == 0:
+                        logger.debug(f"Scheduled cleanup for task {task_name}")
+                    else:
+                        logger.warning(
+                            f"Failed to schedule cleanup task: {cleanup_result.stderr}"
+                        )
 
                 except subprocess.CalledProcessError as e:
                     logger.error(f"Failed to create scheduled task for game {game_pk}")
@@ -493,11 +499,19 @@ def run_daily_scheduling_apscheduler_windows():
 
             if result.returncode == 0:
                 logger.info(f"Pre-game simulation completed for game {game_pk}")
+                if result.stdout.strip():
+                    logger.debug(f"Simulation output: {result.stdout.strip()}")
             else:
-                logger.error(
-                    f"Pre-game simulation failed for game {game_pk}: {result.stderr}"
-                )
+                logger.error(f"Pre-game simulation failed for game {game_pk}")
+                if result.stderr:
+                    logger.error(f"Error details: {result.stderr}")
+                if result.stdout:
+                    logger.error(f"Output: {result.stdout}")
 
+        except subprocess.TimeoutExpired:
+            logger.error(
+                f"Pre-game simulation timed out for game {game_pk} (30 minute limit)"
+            )
         except Exception as e:
             logger.error(f"Error in pre-game simulation for game {game_pk}: {e}")
 
