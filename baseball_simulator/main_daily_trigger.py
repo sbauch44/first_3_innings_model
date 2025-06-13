@@ -370,7 +370,7 @@ def create_windows_scheduled_tasks_for_games():
                     "/tn",
                     task_name,
                     "/tr",
-                    f'"{python_exe}" "{pre_game_script}" {game_pk}',
+                    f'"{python_exe} {pre_game_script} {game_pk}"',
                     "/sc",
                     "once",
                     "/st",
