@@ -380,6 +380,8 @@ def create_windows_scheduled_tasks_for_games():
                     "/f",  # Force overwrite if exists
                     "/rl",
                     "highest",  # Run with highest privileges
+                    "/ru",  # ← ADD THIS LINE
+                    "SYSTEM",  # ← ADD THIS LINE
                 ]
 
                 # Execute the schtasks command
