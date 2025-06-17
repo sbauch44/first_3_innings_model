@@ -121,9 +121,8 @@ To get the project up and running, follow these general steps:
 3.  **Install Dependencies:**
     The project's dependencies are listed in `requirements.txt`.
     ```bash
-    pip install -r baseball_simulator/requirements.txt
+    pip install -r requirements.txt
     ```
-    *Note: The `requirements.txt` is located within the `baseball_simulator` directory.*
 
 4.  **Initial Data Population:**
     *   Before running simulations, you need to populate the `clean_data/` directory. This typically involves:
@@ -173,3 +172,59 @@ python baseball_simulator/main_pre_game_trigger.py 777822
 
 **Logging:**
 Both scripts use Python's `logging` module. Log messages, including progress and potential errors, will be printed to the console. The verbosity and format are configured within each script.
+
+## Cloud Deployment (AWS Example)
+
+This application has been refactored to support deployment in a cloud environment, specifically AWS. The following outlines the key changes and deployment strategy.
+
+### Architectural Changes for Cloud:
+
+*   **Configuration (`config.py`):**
+    *   File paths for data (`BASE_FILE_PATH`), models (`MODEL_PATH`), and scalers (`SCALER_PATH`) are now configurable via environment variables. This allows them to point to S3 bucket locations.
+    *   Sensitive configurations (Fangraphs cookies and headers) can be fetched from AWS Secrets Manager. Environment variables `FANGRAPHS_COOKIES_SECRET_NAME` and `FANGRAPHS_HEADERS_SECRET_NAME` specify the names of the secrets in Secrets Manager. Fallbacks to JSON-string environment variables (`FANGRAPHS_COOKIES_JSON`, `FANGRAPHS_HEADERS_JSON`) and then to default hardcoded values are in place.
+*   **Data Storage & Access:**
+    *   The `storage.py` module and `model_loader.py` have been updated to use `boto3` for reading/writing Parquet files, NetCDF model files, and joblib scaler files from/to AWS S3 when S3 paths are provided via configuration.
+*   **Containerization (`Dockerfile`):**
+    *   A `Dockerfile` is provided to containerize the application. This image can be stored in Amazon ECR and used for deploying to AWS Lambda or AWS Fargate.
+    *   The Dockerfile sets placeholder environment variables (e.g., `BASE_FILE_PATH`, `MODEL_PATH`, `AWS_REGION`) which must be configured during cloud deployment.
+*   **Scheduling Decoupling:**
+    *   The `main_daily_trigger.py` script no longer handles local scheduling of per-game simulations (Windows Task Scheduler and APScheduler logic have been removed).
+    *   Instead, after completing its daily data processing, `main_daily_trigger.py` logs messages in the format `SCHEDULING_PRE_GAME_SIMULATION_FOR_GAME_PK: <game_pk>` for each game that requires simulation. This output is intended to be consumed by cloud orchestration services.
+
+### Proposed AWS Deployment Architecture:
+
+1.  **AWS S3 (Simple Storage Service):**
+    *   Create an S3 bucket to store:
+        *   All data typically found in `clean_data/` (e.g., `s3://your-bucket/data/`).
+        *   Machine learning models (`multi_outcome_model.nc`, `pa_outcome_scaler.joblib`) (e.g., `s3://your-bucket/models/`).
+        *   Simulation results (e.g., `s3://your-bucket/data/results/`).
+2.  **AWS ECR (Elastic Container Registry):**
+    *   Build the Docker image using the provided `Dockerfile`.
+    *   Push the image to an ECR repository.
+3.  **AWS Secrets Manager:**
+    *   Store Fangraphs API credentials (`FANGRAPHS_COOKIES_JSON`, `FANGRAPHS_HEADERS_JSON`) as secrets. Note the names/ARNs of these secrets for configuration.
+4.  **Daily Data Trigger (`main_daily_trigger.py`):**
+    *   **Compute:** Deploy as an AWS Lambda function or an AWS Fargate task, using the ECR image.
+    *   **Scheduling:** Use an Amazon EventBridge (CloudWatch Events) rule to trigger this function/task on a daily schedule (e.g., `cron(0 12 * * ? *)`).
+    *   **IAM Role:** Grant permissions to read/write from the S3 bucket, read from Secrets Manager, and write to CloudWatch Logs.
+5.  **Pre-Game Simulation Trigger (`main_pre_game_trigger.py`):**
+    *   **Orchestration:** Set up a mechanism to trigger simulations based on the logs from the daily data trigger. Options include:
+        *   An AWS Lambda function subscribed to the CloudWatch Log Group of the daily trigger Lambda. This subscription would filter for `SCHEDULING_PRE_GAME_SIMULATION_FOR_GAME_PK:` messages and invoke the pre-game simulation Lambda/Fargate task for each `game_pk`.
+        *   AWS Step Functions: The daily trigger could initiate a Step Function execution that fetches game PKs and then uses a Map state to run simulations in parallel.
+    *   **Compute:** Deploy `main_pre_game_trigger.py` as an AWS Lambda function or an AWS Fargate task, using the ECR image. It will be invoked with the `game_pk` as an argument or environment variable.
+    *   **IAM Role:** Grant permissions to read from S3 (for models, park factors, defensive stats), write to S3 (for simulation results), read from Secrets Manager, and write to CloudWatch Logs.
+6.  **Logging and Monitoring:**
+    *   Utilize Amazon CloudWatch for logs, metrics, and alarms.
+
+### Configuration for Cloud Deployment:
+
+When deploying to AWS Lambda or Fargate, configure the following environment variables for the container:
+*   `BASE_FILE_PATH`: Full S3 path to your data directory (e.g., `s3://your-bucket-name/data/`).
+*   `MODEL_PATH`: Full S3 path to your models directory (e.g., `s3://your-bucket-name/models/`).
+*   `SCALER_PATH`: Full S3 path to your models directory (usually same as `MODEL_PATH`).
+*   `FANGRAPHS_COOKIES_SECRET_NAME`: Name or ARN of the secret in AWS Secrets Manager for Fangraphs cookies.
+*   `FANGRAPHS_HEADERS_SECRET_NAME`: Name or ARN of the secret for Fangraphs headers.
+*   `AWS_REGION`: The AWS region where your services are deployed (e.g., `us-east-1`).
+*   (Optional) `LOG_LEVEL`: e.g., `INFO` or `DEBUG`.
+
+This setup allows for a scalable, automated, and manageable deployment of the baseball simulator in the cloud. Infrastructure as Code (IaC) tools like AWS CloudFormation, AWS CDK, or Terraform are recommended for provisioning and managing these AWS resources.
